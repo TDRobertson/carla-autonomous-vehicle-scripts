@@ -1,7 +1,18 @@
-# Description: This script utilizes a PID controller to integrate with the carla waypoint system
-# Plan a route from the start point to the end point using the GlobalRoutePlanner to generate a list
-# of waypoints from start to destination positions and drives the vehicle along the waypoints.
-# until it reaches the destination.
+'''
+Description: This script utilizes a PID controller to integrate with the carla xyz waypoint system
+Plan a route from the start point to the end point using the GlobalRoutePlanner to generate a list
+of waypoints from start to destination positions and drives the vehicle along the waypoints.
+until it reaches the destination.
+
+The PID controller is used to control the throttle and steering of the vehicle to follow the waypoints. Due to the precise nature of the built in coordinate
+system, the PID controller is very effective at following the waypoints.
+
+Note: System resource fluctuations can cause the pid controller to incorrectly miss the target waypoint, tune the PID values to improve performance if needed.
+The route is traced using the GlobalRoutePlanner and the waypoints are visualized using the debug.draw_point function. Change the start and end locations to
+customize the route.
+'''
+
+
 import glob
 import os
 import sys

@@ -1,3 +1,5 @@
+# Deprecated file originally used to test transforming geolocation data. DO NOT USE.
+# Description: This script demonstrates how to use the GlobalRoutePlanner class to trace a route between two points on the map and drive a vehicle along the route.
 import glob
 import os
 import sys

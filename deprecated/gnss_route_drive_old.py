@@ -1,3 +1,6 @@
+# Deprecated file originally used to test transforming geolocation data. 
+# This file is no longer used in the project.
+
 import glob
 import os
 import sys
@@ -36,6 +39,7 @@ vehicle_bp = blueprint_library.filter('vehicle.*')[0]
 # Get the spawn points from the map
 spawn_points = world.get_map().get_spawn_points()
 start_point = spawn_points[0]
+town_map = world.get_map()
 
 # Define the spawn point
 initial_spawn_point = carla.Transform(carla.Location(x=-25.19, y=139, z=0), carla.Rotation(yaw=0))
@@ -111,7 +115,7 @@ try:
             if gnss_data["latitude"] is not None and gnss_data["longitude"] is not None:
                 # Convert GNSS data to CARLA coordinates using an approximation
                 ref_location = carla.Location(x=-25.19, y=139, z=0)
-                ref_geolocation = map.transform_to_geolocation(ref_location)
+                ref_geolocation = town_map.transform_to_geolocation(ref_location)
                 
                 lat_diff = gnss_data["latitude"] - ref_geolocation.latitude
                 lon_diff = gnss_data["longitude"] - ref_geolocation.longitude

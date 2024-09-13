@@ -1,3 +1,4 @@
+# Deprecated file originally used to test pid controller and sensor output, do not use.
 # attempting to create a route manager in carla using gnss for navigation, currently doesn't work as intended
 
 import glob
@@ -232,6 +233,10 @@ def move_vehicle_to_next_waypoint(vehicle, waypoint):
 
 current_waypoint_index = 0
 total_waypoints = len(route)
+
+# Set vehicle location to start of route
+vehicle.set_transform(route[current_waypoint_index][0].transform)
+
 
 while True:
     if current_waypoint_index < total_waypoints:

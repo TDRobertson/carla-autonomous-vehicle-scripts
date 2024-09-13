@@ -1,3 +1,12 @@
+'''
+The purpose of this file is to demonstrate how the addition of gaussian noise or bias can trick the  vehicles gps navigation system into incorrectly determining its location.
+This results in the vehicles PID controller incorrectly determining the vehicles location and thus the vehicle will drive off the road. For example, the addition of a left leaning bias
+causes the controller to believe the vehicle is further to the right than it is in reality. This causes the vehicle to steer left to correct its position, causing it to cross the median 
+into potential oncoming traffic. This is a dangerous scenario that can be exploited by malicious actors to cause accidents.
+
+The purpose of this script is to demonstrate a real world scenario where a vehicle is driving along a route and is tricked into crossing the median by the addition of gaussian noise or bias to its GPS data.
+'''
+
 import glob
 import os
 import sys

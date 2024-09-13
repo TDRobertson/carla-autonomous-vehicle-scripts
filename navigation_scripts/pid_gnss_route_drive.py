@@ -1,3 +1,17 @@
+'''
+Description: This script utilizes a PID controller to integrate with the carla waypoint system
+Plan a route from the start point to the end point using the GlobalRoutePlanner to generate a list
+of waypoints from start to destination positions and drives the vehicle along the waypoints.
+until it reaches the destination.
+The PID controller is used to control the throttle and steering of the vehicle to follow the waypoints.
+
+This version of the script attempts to integrate the GNSS sensor data to drive the vehicle along the route using an approximation formula
+to determine current location. Even with tuning the script may not work as expected due to the approximation error in the GNSS data conversion
+causing issues within turns.
+
+Note: System resource fluctuations can cause the pid controller to incorrectly miss the target waypoint, tune the PID values to improve performance if needed.
+'''
+
 import glob
 import os
 import sys

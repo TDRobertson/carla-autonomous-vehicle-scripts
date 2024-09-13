@@ -1,7 +1,11 @@
+# Deprecation: This script is an older version of the pid_gnss_route_drive.py script and does not work as expected. It is recommended to use the latest version of the script for accurate results.
 # Description: This script utilizes a PID controller to integrate with the carla waypoint system
 # Plan a route from the start point to the end point using the GlobalRoutePlanner to generate a list
 # of waypoints from start to destination positions and drives the vehicle along the waypoints.
 # until it reaches the destination.
+
+
+
 import glob
 import os
 import sys
