@@ -1,0 +1,305 @@
+Steps to install Carla, ROS2 (humble), and ROS BRIDGE for Windows Subsystem Linux (WSL)
+# Author Thomas. D. Robertson
+# Date: 5/11/24
+
+LINKS USED:
+# Carla Documentation
+https://github.com/carla-simulator/carla
+https://carla.readthedocs.io/en/0.9.15/
+# ROS2 Documentation
+https://docs.ros.org/en/humble/index.html
+# ROS BRIDGE Documentation
+https://carla.readthedocs.io/projects/ros-bridge/en/latest/
+
+# ~/.bashrc setup, add these to file so you don't have to source them with each new terminal. (remove the <>)
+source /opt/ros/humble/setup.bash # Doc instructions are for foxy but we are using humble
+source ./install/setup.bash
+export CARLA_IP=<windows server ip address> #localhost doesnt work must use IP
+export ROS_DOMAIN_ID=0 # If not using in an environment with others, otherwise signals will overlap.
+export CARLA_ROOT=/mnt/c/CARLA_0.9.15 #the root folder where CARLA.exe is located on windows, /mnt/c/ is the linux replacement for C:/ path
+
+# NOTES
+source ./install/setup.bash MUST BE RAN before being able to use any carla-ros-bridge commands on new terminal.
+Ports used are TCP 2000 and 8000
+
+The SENSOR.py in \\wsl.localhost\Ubuntu\home\user\carla-ros-bridge\src\ros-bridge\carla_ros_bridge\src\carla_ros_bridge
+needs to be changed from
+        self._dvs_events = numpy.frombuffer(carla_dvs_event_array.raw_data,
+                                            dtype=numpy.dtype([
+                                                ('x', numpy.uint16),
+                                                ('y', numpy.uint16),
+                                                ('t', numpy.int64),
+                                                ('pol', numpy.bool)
+                                            ]))
+to
+        self._dvs_events = numpy.frombuffer(carla_dvs_event_array.raw_data,
+                                            dtype=numpy.dtype([
+                                                ('x', numpy.uint16),
+                                                ('y', numpy.uint16),
+                                                ('t', numpy.int64),
+                                                ('pol', bool)
+                                            ]))
+the CARLA VERSION file needs to be changed from 0.9.13 to 0.9.15
+
+the CMake file for PCL recorder under:
+\\wsl.localhost\Ubuntu\home\user\carla-ros-bridge\src\ros-bridge\pcl_recorder\CMakeLists.txt
+on line 68, change:
+  ament_target_dependencies(${PROJECT_NAME}_node rclcpp sensor_msgs
+                            pcl_conversions tf2 tf2_ros)
+							
+to
+
+  ament_target_dependencies(${PROJECT_NAME}_node rclcpp sensor_msgs
+                            pcl_conversions tf2 tf2_eigen)
+
+# Libraries Installed
+# Windows
+pip3 install --user pygame numpy
+## Consider using Jupyter Notebooks for Incremental Python development when using either server.
+
+# Linux
+install these in a virtual environment recommended after using sudo apt install python3-venv IF you are on multiple projects.
+If only using WSL for this project then DO NOT use a virtual environment due to many package discrepency issues when building ros colon later.
+
+sudo apt install python3-pip
+pip install --user pygame numpy &&		# Remove the --user if using venv
+pip3 install --user pygame numpy		# Remove the --user if using venv
+sudo apt install ipython3
+pip3 install jupyter 	# For incremental development, runs on port 8888, open the server with the link from the prompt.
+pip install ipykernel	# To use as the kernal for jupyter
+pip3 install carla
+pip3 install ultralytics
+
+#Potentially Optional depending on prebuilt python programs used:
+pip3 install future numpy
+pip3 install --upgrade cython setuptools
+pip3 install -r requirements.txt
+pip3 install matplotlib
+pip3 install Pillow
+pip3 install open3d
+
+# ROS 2 install on LINUX
+129  sudo apt install software-properties-common
+130  sudo add-apt-repository universe
+131  sudo apt update && sudo apt install curl -y
+132  sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
+133  echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null
+
+
+#### INSTALLATION ####
+## Carla Installation
+# Download and Install the PRE COMPILED Carla Package from https://github.com/carla-simulator/carla/releases/tag/0.9.15/
+and extract close to the C drive (extract the additional maps pack into the CARLA root folder).
+# IF YOU ARE USING Windows Subsystem for Linux (WSL):
+	Start by downloading the WSL app through the microsoft store or by running wsl --install in the powershell terminal.
+	After install with wsl --install, windows will automatically install Ubuntu 22.04 as the default distro.
+	Before restarting your computer search for windows features -> Turn windows features on or off -> check the boxes ON for:
+	Windows Hypervisor Platform, Windows Subsystem for Linux, (Virtual Machine Platform should already be on, if not turn on).
+	Hit OK and follow the prompt to restart the machine.
+		Afterwards open the new Ubuntu terminal which will automatically set up your local user admin account.
+	Once finished setting up your account, run sudo apt update -> sudo apt upgrade to finish setting up the system.
+	
+# GIT SETUP:
+Set up your git environment by running:
+	git config --global user.name "your_name_here"
+	git config --global user.email "your_github/gitlab_email_here"
+	
+# SSH keys:
+	make a new key for that computer to prove to github you are the account owner accessing.
+		ssh-keygen -t rsa 4096 -C "githubemailhere@account"
+	press enter to give default name of id_rsa
+	enter passphrase to use the ssh key.
+
+	search for key using ls | grep keynamehere copy the PUBLIC (.pub) to connect by using cat keynamehere.pub 
+	then copy the string and paste into github ssh and gpc keys section.
+	Make sure your local git command line knows about the new key by activating the ssh agent using (Linux)
+	eval "$(ssh-agent -s)"
+	Agent pid 59566
+	ssh-add ~/.ssh/keynamehere
+
+# Set up your virtual environment
+place your virtual environment in the root linux folder and then install these libraries
+# Linux
+install these in a virtual environment recommended after using sudo apt install python3-venv
+sudo apt install python3-pip
+pip install pygame numpy &&		# Remove the --user if using venv
+pip3 install pygame numpy		# Remove the --user if using venv
+pip3 install carla
+pip3 install ultralytics
+sudo apt install ipython3
+pip3 install jupyter 	# For incremental development, runs on port 8888, open the server with the link from the prompt.
+pip install ipykernel	# To use as the kernal for jupyter
+The INITIAL setup portion for your linux environment is now done.
+
+	# USING PYTHON SCRIPTS FROM WSL TO WINDOWS SOURCE
+	Copy the PythonAPI folder from your windows source and place it into your linux carla folder.
+	Add these lines to your .bashrc file:
+	source carla-venv/bin/activate		# If using the virtual environment
+	export CARLA_HOST=IP_ADDRESS_HERE
+	export CARLA_PORT=2000
+	export CARLA_ROOT=/mnt/c/CARLA_0.9.15
+	export PYTHONPATH=$PYTHONPATH:$CARLA_ROOT/PythonAPI/carla
+	
+	This setup assumes you have the CARLA exe on the windows server at the root folder in the C drive. It will run
+	everytime you open Ubuntu terminal and activate your virtual environment as well as setting the values for
+	the host, port, root, and path variables to be used by the python scripts within WSL. This will allow WSL
+	python scripts to interact with the windows server.
+	
+	On all the prebuilt python examples (or future code) you are using, replace the client code of:
+	client = carla.Client(args.host, args.port)
+	with
+	host = os.getenv('CARLA_HOST', args.host)
+    client = carla.Client(host, args.port)
+	
+	This allows you to set your localhosts IP address for use in server communication while also allowing for command line arguments
+	such as:
+	python3 generate_traffic.py			# Using the host variable placed in the code
+	or
+	python3 generate_traffic.py --host IP_ADDRESS_HERE --port 2000
+	
+	NOTE THAT port 2000 is the default port used in the connections, so it usually doesn't need changed.
+	If using WSL go ahead and run the above code with the passed host arguments to make sure connections are working.
+	
+## ROS2 Installation
+Instructions used: https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debians.html
+Run the following commands in order:
+
+sudo apt install software-properties-common
+
+sudo add-apt-repository universe
+
+sudo apt update && sudo apt install curl -y
+
+sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
+
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null
+
+sudo apt update
+sudo apt upgrade
+
+sudo apt install ros-humble-desktop		# This will take a while.
+sudo apt install ros-dev-tools
+
+# Source the script add this to your .bashrc file manually or run echo "export source /opt/ros/humble/setup.bash" >> ~/.bashrc
+Confirm installation was successful by running: ros2, this should give you a usage output.
+
+Now run these following commands in TWO different Ubuntu terminals to check that ros-humble-desktop is working.
+Terminal 1:
+ros2 run demo_nodes_cpp talker
+
+Terminal 2:
+ros2 run demo_nodes_py listener
+
+You should see output being sent from the first terminal and received by the second, if so everything was installed correctly.
+
+## ROS2 Environment
+Set your ROS_DOMAIN_ID to 0 (or a unique variable if using a group network) using:
+export ROS_DOMAIN_ID=<your_domain_id>		# replace your_domain_id with an integer and remove the <>
+then run:
+echo "export ROS_DOMAIN_ID=<your_domain_id>" >> ~/.bashrc
+
+# Follow the tutorials at https://docs.ros.org/en/humble/Tutorials.html to get used to ROS2 commands 
+but do not build the workspace or run any colcon builds yet.
+
+## carla-ros-bridge setup
+Using: https://carla.readthedocs.io/projects/ros-bridge/en/latest/ros_installation_ros2/
+
+add these commands to your .bashrc file and source the .bashrc file.
+export CARLA_ROOT=/mnt/c/CARLA_0.9.15		# Assumes carla was installed in the root C directory.
+export PYTHONPATH=$PYTHONPATH:$CARLA_ROOT/PythonAPI/carla
+
+Then, from the home directory, run these commands:
+mkdir -p ~/carla-ros-bridge && cd ~/carla-ros-bridge
+git clone --recurse-submodules https://github.com/carla-simulator/ros-bridge.git src/ros-bridge
+
+**If you added the ROS Environment source to your .bashrc file you can skip this step.**
+source /opt/ros/humble/setup.bash
+
+run these commands:
+sudo rosdep init
+rosdep update
+rosdep install --from-paths src --ignore-src -r
+
+# Colcon Build
+Run this command:
+colcon build
+
+You SHOULD see this error the first time:	#Ignore the cmake version warning
+In file included from /home/user/carla-ros-bridge/src/ros-bridge/pcl_recorder/src/mainROS2.cpp:7:
+/home/user/carla-ros-bridge/src/ros-bridge/pcl_recorder/include/PclRecorderROS2.h:13:10: fatal error: tf2_eigen/tf2_eigen.h: No such file or directory
+   13 | #include <tf2_eigen/tf2_eigen.h>
+   
+ Navigate to and open the CMakeLists.txt file located at:
+ \\wsl.localhost\Ubuntu\home\user\carla-ros-bridge\src\ros-bridge\pcl_recorder/CMakeLists.txt
+ 
+ And change the code at line 68 from
+ \\wsl.localhost\Ubuntu\home\user\carla-ros-bridge\src\ros-bridge\pcl_recorder\CMakeLists.txt
+  ament_target_dependencies(${PROJECT_NAME}_node rclcpp sensor_msgs
+                            pcl_conversions tf2 tf2_ros)
+							
+to
+
+  ament_target_dependencies(${PROJECT_NAME}_node rclcpp sensor_msgs
+                            pcl_conversions tf2 tf2_eigen)
+							
+Now change The version number of carla_ros_bridge in:
+\\wsl.localhost\Ubuntu\home\user\carla-ros-bridge\src\ros-bridge\carla_ros_bridge\src\carla_ros_bridge
+from 0.9.13 to 0.9.15
+
+And change the included headers from:
+\\wsl.localhost\Ubuntu\home\user\carla-ros-bridge\src\ros-bridge\pcl_recorder\include/PclRecorderROS2
+from
+	#include <tf2_eigen/tf2_eigen.h
+to
+	#include <tf2_eigen/tf2_eigen.hpp
+
+							
+Finally, re-run the colcon build command and run source ./install/setup.bash
+You will still have two errors happen if you run
+ros2 launch carla_ros_bridge carla_ros_bridge.launch.py
+or
+ros2 launch carla_ros_bridge carla_ros_bridge_with_example_ego_vehicle.launch.py
+
+To fix the shutdown error in each file replace go to this file location and open bridge.py
+\\wsl.localhost\Ubuntu\home\user\carla-ros-bridge\install\carla_ros_bridge\lib\python3.10\site-packages\carla_ros_bridge
+
+And replace the destror() function with this code:
+def destroy(self):
+    """
+    Function to destroy this object.
+    """
+    self.loginfo("Shutting down...")
+    if hasattr(self, 'shutdown'):
+        self.shutdown.set()
+    else:
+        self.logwarn("Shutdown attribute not set.")
+
+    if not self.sync_mode:
+        if self.on_tick_id:
+            self.carla_world.remove_on_tick(self.on_tick_id)
+        self.actor_factory.thread.join()
+    else:
+        self.synchronous_mode_update_thread.join()
+    self.loginfo("Object update finished.")
+    self.debug_helper.destroy()
+    self.status_publisher.destroy()
+    self.destroy_service(self.spawn_object_service)
+    self.destroy_service(self.destroy_object_service)
+    self.destroy_subscription(self.carla_weather_subscriber)
+    self.carla_control_queue.put(CarlaControl.STEP_ONCE)
+
+    for uid in self._registered_actors:
+        self.actor_factory.destroy_actor(uid)
+    self.actor_factory.update_available_objects()
+    self.actor_factory.clear()
+    super(CarlaRosBridge, self).destroy()
+	
+ALSO go to the file path 
+\\wsl.localhost\Ubuntu\home\user\carla-ros-bridge\src\ros-bridge\carla_ros_bridge\launch
+and replace the network connection parameters of each launch file:
+<arg name='host' default='localhost'/>
+with your IP address of the server machine being used.
+YOU WILL HAVE TO DO THIS FOR ANY FILE YOU ARE USING.
+	
+Now run colcon build, re source the environment, and run it again.
+Do this for any premade ros bridge code being used to fix the seg fault error on shutdown.
