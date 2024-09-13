@@ -1,3 +1,6 @@
+# Description: This script shows all waypoints in the map and their corresponding GNSS locations.
+# The waypoints are drawn as red points and the GNSS locations are drawn as green text at the waypoint locations.
+
 import glob
 import os
 import sys

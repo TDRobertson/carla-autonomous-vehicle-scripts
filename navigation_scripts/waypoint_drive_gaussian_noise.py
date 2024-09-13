@@ -1,3 +1,12 @@
+'''
+A simple script designed to spawn a vehicle and drive it to a target location.
+The vehicle will gradually slow down as it approaches the target location, and the vehicle
+will despawn once it reaches the target destination.
+
+The purpose of the script was to quickly set up an environment for testing the addition of noise
+to GNSS data, and to demonstrate the effects of noise on the vehicle's ability to reach the target
+'''
+
 import carla
 import time
 import math

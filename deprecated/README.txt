@@ -1,2 +1,2 @@
-This folder contains non-working scripts caused by errors or updates that have not needed to be fixed to continue research progress.
-Most scripts consist of implementing new features in a test environment that is later transferred to working scripts.
+This folder contains non-working scripts or otherwise unused scripts caused by errors or updates that have not needed to be fixed to continue research progress.
+Most scripts consist of implementing new features in a test environment that is later transferred to other scripts.

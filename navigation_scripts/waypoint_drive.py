@@ -1,3 +1,12 @@
+'''
+A simple script designed to spawn a vehicle and drive it to a target location.
+The vehicle will gradually slow down as it approaches the target location, and the vehicle
+will despawn once it reaches the target destination.
+
+The purpose of the script was to quickly set up an environment for the gnss_drive.py script
+using carlas built in xyz coordinate system to test vehicle positioning before adding
+in a gps approximation system.
+'''
 import carla
 import time
 import math

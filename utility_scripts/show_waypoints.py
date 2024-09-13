@@ -1,3 +1,6 @@
+# Description: This script shows the waypoints on the map with their XYZ coordinates.
+# This was used to find starting points for the vehicles in the simulation.
+
 import glob
 import os
 import sys

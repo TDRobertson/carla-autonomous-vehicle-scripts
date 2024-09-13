@@ -1,7 +1,8 @@
-# Description: This script utilizes a PID controller to integrate with the carla waypoint system
-# Plan a route from the start point to the end point using the GlobalRoutePlanner
-# Generate uniformly spaced waypoints along the route and drive the vehicle to each waypoint
-# Until it reaches the end.
+'''
+Deprecated: This file was used for testing uniform distancing between waypoints in the carla traffic simulation environment.
+The original feature will not always keep uniform distance between waypoints during curves and at certain points on the map.
+This feature was ultimately not needed in final testing and thus not implemented.
+'''
 import glob
 import os
 import sys
