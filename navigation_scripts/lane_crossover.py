@@ -230,6 +230,10 @@ try:
         vehicle_location = vehicle.get_location()
         target_waypoint = route[target_index][0]
         target_location = target_waypoint.transform.location
+        
+        # Print current vehicle location (true position) from CARLA
+        vehicle_true_location = vehicle.get_location()
+        print(f"True Location from CARLA: (X: {vehicle_true_location.x}, Y: {vehicle_true_location.y})")
 
         # Visualize the target waypoint
         world.debug.draw_point(target_location, size=0.2, color=carla.Color(r=255, g=0, b=0), life_time=0.1)
@@ -246,6 +250,14 @@ try:
         approx_y = ref_location.y + lat_diff * 111320
 
         current_location = carla.Location(x=approx_x, y=approx_y)
+
+        # Print modified GPS location after noise and bias
+        print(f"Modified GPS Location: (X: {approx_x:.2f}, Y: {approx_y:.2f})")
+
+        # Calculate and print the difference between true and modified coordinates
+        diff_x = vehicle_true_location.x - approx_x
+        diff_y = vehicle_true_location.y - approx_y
+        print(f"Difference (True - Modified): ΔX: {diff_x:.2f}, ΔY: {diff_y:.2f}\n")
 
         # Calculate the x and y distances to the target location
         dx, dy = calculate_distances(current_location, target_location)
