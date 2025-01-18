@@ -6,14 +6,30 @@ import math
 def calculate_distance(location1, location2):
     return location1.distance(location2)
 
-# Function to spawn an additional vehicle
+
+# Similar spawn function that should make the Chevy Impala
 def spawn_obstacle_vehicle(world, blueprint_library, location):
-    vehicle_bp = blueprint_library.filter('vehicle.*')[1]  # Use a different blueprint for the obstacle vehicle
+    vehicle_bp = blueprint_library.find('vehicle.chevrolet.impala')  # Specify Chevy Impala
     spawn_transform = carla.Transform(location, carla.Rotation(yaw=0))
+
+    # Visualize the intended spawn point
+    world.debug.draw_point(location, size=0.5, color=carla.Color(r=255, g=0, b=0), life_time=10.0)
+
     obstacle_vehicle = world.try_spawn_actor(vehicle_bp, spawn_transform)
     if obstacle_vehicle:
-        print(f"Obstacle vehicle spawned at {location}")
+        print(f"Obstacle vehicle (Chevy Impala) spawned at {location}")
+    else:
+        print("Failed to spawn obstacle vehicle. Check spawn location or blueprint.")
     return obstacle_vehicle
+
+# # Function to spawn an additional vehicle THIS FUNCTION WORKS
+# def spawn_obstacle_vehicle(world, blueprint_library, location):
+#     vehicle_bp = blueprint_library.filter('vehicle.*')[1]  # Use a different blueprint for the obstacle vehicle
+#     spawn_transform = carla.Transform(location, carla.Rotation(yaw=0))
+#     obstacle_vehicle = world.try_spawn_actor(vehicle_bp, spawn_transform)
+#     if obstacle_vehicle:
+#         print(f"Obstacle vehicle spawned at {location}")
+#     return obstacle_vehicle
 
 # Function to add a radar sensor
 def attach_radar(vehicle, world):
@@ -102,7 +118,7 @@ try:
     vehicle = world.spawn_actor(vehicle_bp, spawn_point)
     radar = attach_radar(vehicle, world)  # Attach radar to vehicle
 
-    vehicle.apply_control(carla.VehicleControl(throttle=0.5))
+    vehicle.apply_control(carla.VehicleControl(throttle=0.6))
     print("Vehicle is moving forward.")
 
     start_time = None
@@ -111,11 +127,16 @@ try:
     while True:
         current_location = vehicle.get_location()
         distance_to_target = calculate_distance(current_location, target_location)
-        
-        if not stopped and calculate_distance(current_location, obstacle_location) < 10.0:
-            print("Approaching obstacle! Slowing down.")
-            vehicle.apply_control(carla.VehicleControl(throttle=0.1, brake=1.0))
 
+        if not stopped and obstacle_vehicle:  # Ensure obstacle vehicle exists
+            obstacle_current_location = obstacle_vehicle.get_location()  # Dynamic position
+            distance_to_obstacle = calculate_distance(current_location, obstacle_current_location)
+
+            if distance_to_obstacle < 10.0:
+                print(f"Approaching obstacle! Distance: {distance_to_obstacle:.2f} meters. Slowing down.")
+                vehicle.apply_control(carla.VehicleControl(throttle=0.1, brake=1.0))
+
+        # Logic for stopping at the target
         if vehicle.get_velocity().length() < 0.1:
             if start_time is None:
                 start_time = time.time()
@@ -124,6 +145,7 @@ try:
                 break
 
         time.sleep(0.1)
+
 
 finally:
     vehicle.destroy()
