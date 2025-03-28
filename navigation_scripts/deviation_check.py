@@ -1,10 +1,8 @@
 '''
-The purpose of this file is to demonstrate how the addition of gaussian noise or bias can trick the  vehicles gps navigation system into incorrectly determining its location.
+The purpose of this file is to demonstrate how the addition of gaussian noise or bias can trick the vehicles gps navigation system into incorrectly determining its location.
 This results in the vehicles PID controller incorrectly determining the vehicles location and thus the vehicle will drive off the road. For example, the addition of a left leaning bias
 causes the controller to believe the vehicle is further to the right than it is in reality. This causes the vehicle to steer left to correct its position, causing it to cross the median 
 into potential oncoming traffic. This is a dangerous scenario that can be exploited by malicious actors to cause accidents.
-
-The purpose of this script is to demonstrate a real world scenario where a vehicle is driving along a route and is tricked into crossing the median by the addition of gaussian noise or bias to its GPS data.
 '''
 
 import glob
@@ -60,26 +58,19 @@ vehicle_bp = blueprint_library.filter('vehicle.*')[0]
 gnss_bp = blueprint_library.find('sensor.other.gnss')
 actor_list = []
 
-# Get the spawn points from the map
+# Get the spawn points from the map and define our route
 spawn_points = world.get_map().get_spawn_points()
-# start_point = spawn_points[0]
 town_map = world.get_map()
-
-# Define the spawn point
-# spawn_point = carla.Transform(carla.Location(x=-25.19, y=139, z=0), carla.Rotation(yaw=0))
-# target_location = carla.Location(x=44, y=139, z=0)
 spawn_point = carla.Transform(carla.Location(x=-20.19, y=137.09, z=0.00), carla.Rotation(yaw=0))
-# target_location = carla.Location(x=49.35, y=137.63, z=0.00)
 target_location = carla.Location(x=59.35, y=137.68, z=0.00)
 
-sampling_resolution = 3.0   # distance between each waypoint - 3 meters
+sampling_resolution = 3.0   # distance between each waypoint (in meters)
 grp = GlobalRoutePlanner(town_map, sampling_resolution)
 route = grp.trace_route(spawn_point.location, target_location)
 for waypoint in route:
     world.debug.draw_point(waypoint[0].transform.location, size=0.1, color=carla.Color(r=0, g=255, b=0), life_time=120.0, persistent_lines=True)
 
 # PID Controllers for throttle and steering
-# Default: Kp=1.0, Ki=0.0, Kd=0.05
 throttle_pid = PIDController(Kp=0.8, Ki=0.01, Kd=0.1)
 steering_pid = PIDController(Kp=1.0, Ki=0.01, Kd=0.1)
 
@@ -98,29 +89,17 @@ def draw_circle(world, location, radius=1.0, color=carla.Color(r=255, g=0, b=0),
         point_location = carla.Location(location.x + x_offset, location.y + y_offset, location.z)
         world.debug.draw_point(point_location, size=0.1, color=color, life_time=life_time)
 
-# # Define a function to calculate the distance between two points
-# def calculate_distance(location1, location2):
-#     return location1.distance(location2)
-
 # Define a function to calculate the x and y distances between two points
 def calculate_distances(location1, location2):
     dx = location2.x - location1.x
     dy = location2.y - location1.y
     return dx, dy
 
-# Define a function to check if the vehicle is crossing the median, used for debugging.
-def is_crossing_median(dy):
-    median_y = 134.0  # Example y-coordinate of the median, adjust based on your map
-    if dy < median_y:
-        print("Vehicle is crossing the median to the left!")
-        return True
-    return False
-
 # Print the route waypoints for debugging
 for i, waypoint in enumerate(route):
-            location = waypoint[0].transform.location
-            yaw = waypoint[0].transform.rotation.yaw
-            print(f"Waypoint {i}: Location({location.x}, {location.y}, {location.z}), Yaw: {yaw}")
+    location = waypoint[0].transform.location
+    yaw = waypoint[0].transform.rotation.yaw
+    print(f"Waypoint {i}: Location({location.x}, {location.y}, {location.z}), Yaw: {yaw}")
 
 # Define a callback to store camera data
 def camera_callback(image, data_dict):
@@ -135,7 +114,7 @@ def display_camera_feed(camera_data):
             break
     cv2.destroyAllWindows()
 
-# Compute steering angle
+# Compute steering angle normalization
 def normalize_angle(angle):
     while angle > math.pi:
         angle -= 2 * math.pi
@@ -143,7 +122,6 @@ def normalize_angle(angle):
         angle += 2 * math.pi
     return angle
 
-# Main Loop to drive vehicle along the route
 try:
     # Draw circles at the start and target locations
     draw_circle(world, spawn_point.location)
@@ -156,9 +134,10 @@ try:
         print(f"Vehicle spawned at location: {spawn_point.location}")
     else:
         print("Failed to spawn the vehicle.")
+
     # Add a GNSS sensor to the vehicle
     gnss_bp = blueprint_library.find('sensor.other.gnss')
-    gnss_transform = carla.Transform(carla.Location(x=0, y=0, z=2))  # Position the GNSS sensor on the vehicle
+    gnss_transform = carla.Transform(carla.Location(x=0, y=0, z=2))
     gnss_sensor = world.spawn_actor(gnss_bp, gnss_transform, attach_to=vehicle)
     actor_list.append(gnss_sensor)
 
@@ -167,55 +146,50 @@ try:
 
     # Variables to track elapsed time and maximum noise/bias values
     start_time = time.time()
-    max_noise_std_dev = 0.00001  # Maximum standard deviation for the noise to add, approx 1.11 meters error per step.
-    max_bias = -0.00001  # Maximum bias to introduce a left swerve, approx 5.55 meters error
+    max_noise_std_dev = 0.00001  # Maximum standard deviation for noise (approx. 1.11 m error per step)
+    max_bias = -0.00002         # Maximum bias to introduce a left swerve (approx. 1.11 m error)
     startup = 3
 
-    # Define a callback to store GNSS data with added Gaussian noise
+    # GNSS sensor callback with added bias (and optional noise)
     def gnss_callback(gnss):
         current_time = time.time()
         elapsed_time = current_time - start_time
-        # Add Gaussian noise to the latitude and longitude
-        # Calculate the noise and bias based on the elapsed time to start after 2 seconds
         if elapsed_time > startup:
-            noise_std_dev = ((elapsed_time-startup) / 20.0) * max_noise_std_dev  # Gradually increase over 20 seconds
-            bias = ((elapsed_time - startup) / 20.0) * max_bias  # Gradually increase over 20 seconds
+            noise_std_dev = ((elapsed_time - startup) / 20.0) * max_noise_std_dev
+            bias = ((elapsed_time - startup) / 20.0) * max_bias
         else:
             noise_std_dev = 0.0
             bias = 0.0
 
-        # noise_std_dev = 0.00001  # Standard deviation for the noise, approx 1.11 meters error per deviation.
-        # bias = 0.00005  # Bias to introduce a left swerve (positive value forces vehicle to swerve right on latitude)
-        # noisy_latitude = gnss.latitude + random.gauss(0, noise_std_dev) + bias
-        # noisy_longitude = gnss.longitude + random.gauss(0, noise_std_dev) + bias
-
+        # Apply bias (and noise if needed)
         noisy_latitude = gnss.latitude + bias
-
-        # noisy_latitude = gnss.latitude  # no noise
-        noisy_longitude = gnss.longitude  # no noise
-
-        gnss_data["latitude"] = noisy_latitude  # Affects y-coordinate
-        gnss_data["longitude"] = noisy_longitude # Affects x-coordinate
+        noisy_longitude = gnss.longitude  # No noise applied to longitude here
+        gnss_data["latitude"] = noisy_latitude
+        gnss_data["longitude"] = noisy_longitude
         gnss_data["altitude"] = gnss.altitude
 
     # Subscribe to GNSS sensor data
     gnss_sensor.listen(gnss_callback)
 
-    # Initialize camera
+    # Initialize camera sensor
     camera_bp = blueprint_library.find('sensor.camera.rgb')
     camera_transform = carla.Transform(carla.Location(x=1.5, y=0, z=2.4), carla.Rotation(pitch=-15))
     camera_sensor = world.spawn_actor(camera_bp, camera_transform, attach_to=vehicle)
     actor_list.append(camera_sensor)
 
-    # Initialize camera data storage
     image_width = camera_bp.get_attribute('image_size_x').as_int()
     image_height = camera_bp.get_attribute('image_size_y').as_int()
     camera_data = {"image": np.zeros((image_height, image_width, 4), dtype=np.uint8)}
     camera_sensor.listen(lambda image: camera_callback(image, camera_data))
 
-    # Start the camera feed display thread
     camera_thread = threading.Thread(target=display_camera_feed, args=(camera_data,))
     camera_thread.start()
+
+    # Initialize variables to track the min, max, and average deviation (after PID correction)
+    min_deviation = float('inf')
+    max_deviation = 0.0
+    sum_deviation = 0.0
+    count_deviation = 0
 
     # Main loop to drive the vehicle along the route
     reached_target = False
@@ -227,45 +201,43 @@ try:
         dt = current_time - last_time
         last_time = current_time
 
-        vehicle_location = vehicle.get_location()
+        # Fetch current true vehicle location from CARLA
+        vehicle_true_location = vehicle.get_location()
+        print(f"True Location from CARLA: (X: {vehicle_true_location.x:.2f}, Y: {vehicle_true_location.y:.2f})")
+
         target_waypoint = route[target_index][0]
         target_location = target_waypoint.transform.location
-        
-        # Print current vehicle location (true position) from CARLA
-        vehicle_true_location = vehicle.get_location()
-        print(f"True Location from CARLA: (X: {vehicle_true_location.x}, Y: {vehicle_true_location.y})")
-
-        # Visualize the target waypoint
         world.debug.draw_point(target_location, size=0.2, color=carla.Color(r=255, g=0, b=0), life_time=0.1)
 
-        # Convert GNSS data to CARLA coordinates using an approximation
+        # Convert GNSS data to CARLA coordinates (approximation)
         ref_location = carla.Location(x=-20.19, y=137.09, z=0.00)
         ref_geolocation = town_map.transform_to_geolocation(ref_location)
-        
         lat_diff = gnss_data["latitude"] - ref_geolocation.latitude
         lon_diff = gnss_data["longitude"] - ref_geolocation.longitude
 
-        # Assuming 1 degree latitude ≈ 111.32 km and 1 degree longitude ≈ 111.32 km * cos(latitude)
         approx_x = ref_location.x + lon_diff * 111320 * math.cos(ref_geolocation.latitude * math.pi / 180)
         approx_y = ref_location.y + lat_diff * 111320
-
         current_location = carla.Location(x=approx_x, y=approx_y)
 
-        # Print modified GPS location after noise and bias
         print(f"Modified GPS Location: (X: {approx_x:.2f}, Y: {approx_y:.2f})")
 
-        # Calculate and print the difference between true and modified coordinates
+        # Print deviation BEFORE applying PID corrections
+        pre_diff_x = vehicle_true_location.x - approx_x
+        pre_diff_y = vehicle_true_location.y - approx_y
+        print(f"Deviation BEFORE PID correction: ΔX: {pre_diff_x:.2f}, ΔY: {pre_diff_y:.2f}")
+
+        # Also print the difference (True - Modified) for context
         diff_x = vehicle_true_location.x - approx_x
         diff_y = vehicle_true_location.y - approx_y
         print(f"Difference (True - Modified): ΔX: {diff_x:.2f}, ΔY: {diff_y:.2f}\n")
 
-        # Calculate the x and y distances to the target location
+        # Calculate distances to target using the modified GNSS location
         dx, dy = calculate_distances(current_location, target_location)
-        print(f"X Distance to target (GNSS): {dx} meters, Y Distance to target (GNSS): {dy} meters")
-        # Print modified gnss locations
-        print(f"Current GNSS Location: ({approx_x}, {approx_y}), Target GNSS Location: ({target_location.x}, {target_location.y})")
-        # distance = calculate_distance(vehicle_location, target_location)
-        if abs(dx) < 1.5 and abs(dy) < 0.5:  # Move to the next waypoint if close enough
+        print(f"X Distance to target (GNSS): {dx:.2f} meters, Y Distance to target (GNSS): {dy:.2f} meters")
+        print(f"Current GNSS Location: ({approx_x:.2f}, {approx_y:.2f}), Target GNSS Location: ({target_location.x:.2f}, {target_location.y:.2f})")
+
+        # Check if the current waypoint has been reached
+        if abs(dx) < 1.5 and abs(dy) < 0.5:
             print(f"Reached waypoint {target_index} at location {target_location}")
             target_index += 1
             if target_index >= len(route):
@@ -275,34 +247,50 @@ try:
             target_location = target_waypoint.transform.location
             print(f"Moving to waypoint {target_index} at location {target_location}")
 
-        # Compute control signals
+        # Compute control signals using PID controllers
         error_x = dx
         error_y = dy
         throttle = throttle_pid.compute(math.sqrt(error_x**2 + error_y**2), dt)
-        throttle = np.clip(throttle, 0.0, 0.75)  # Ensure throttle is between 0 and 1
+        throttle = np.clip(throttle, 0.0, 0.75)
 
-        # Compute target yaw based on modified GNSS data
-        target_yaw = math.atan2(-dy, dx) # use negative dy for unreal engine coordinate conversion
+        target_yaw = math.atan2(-dy, dx)  # Negative dy for coordinate conversion
         target_yaw = normalize_angle(target_yaw)
-
-        # Compute steering angle based on x distance (dx)
         vehicle_transform = vehicle.get_transform()
         vehicle_yaw = vehicle_transform.rotation.yaw * (math.pi / 180.0)
         yaw_error = normalize_angle(target_yaw - vehicle_yaw)
-
         steering = steering_pid.compute(yaw_error, dt)
-        steering = np.clip(steering, -1.0, 1.0)  # Ensure steering is between -1 and 1
+        steering = np.clip(steering, -1.0, 1.0)
 
-        # Apply vehicle control
+        # Apply the control commands to the vehicle
         vehicle.apply_control(carla.VehicleControl(throttle=throttle, steer=steering))
 
-        # print(f"Throttle: {throttle:.2f}, Steering: {steering:.2f}")
+        # Allow a short delay for the control to take effect and then fetch the updated location
+        time.sleep(0.05)
+        updated_location = vehicle.get_location()
+        post_diff_x = updated_location.x - approx_x
+        post_diff_y = updated_location.y - approx_y
+        print(f"Deviation AFTER PID correction: ΔX: {post_diff_x:.2f}, ΔY: {post_diff_y:.2f}\n")
+
+        # Calculate the current deviation magnitude and update the min, max, and average trackers
+        current_deviation = math.sqrt(post_diff_x**2 + post_diff_y**2)
+        min_deviation = min(min_deviation, current_deviation)
+        max_deviation = max(max_deviation, current_deviation)
+        sum_deviation += current_deviation
+        count_deviation += 1
 
         time.sleep(0.05)
 
+    # After the loop, compute and print the average deviation
+    if count_deviation > 0:
+        avg_deviation = sum_deviation / count_deviation
+    else:
+        avg_deviation = 0.0
+
+    print(f"Minimum deviation during run: {min_deviation:.2f} meters")
+    print(f"Maximum deviation during run: {max_deviation:.2f} meters")
+    print(f"Average deviation during run: {avg_deviation:.2f} meters")
     print("Vehicle reached the final target.")
     cleanUp()
-
 
 except KeyboardInterrupt:
     cleanUp()
