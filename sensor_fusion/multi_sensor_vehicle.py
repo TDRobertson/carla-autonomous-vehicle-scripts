@@ -67,6 +67,8 @@ class SensorFusionVehicle:
         # Vehicle control parameters
         self.emergency_stop = False
         self.emergency_stop_duration = 0
+        self.warning_active = False  # New flag for radar warning
+        self.last_detected_distance = None  # Store the last detected distance
         
         # Get the spectator
         self.spectator = self.world.get_spectator()
@@ -218,6 +220,41 @@ class SensorFusionVehicle:
         array = np.frombuffer(image.raw_data, dtype=np.dtype("uint8"))
         array = np.reshape(array, (image.height, image.width, 4))
         array = array[:, :, :3]
+        
+        # Add warning overlay if radar detected something
+        if self.warning_active and self.last_detected_distance is not None:
+            # Create a copy of the image to avoid modifying the original
+            array = array.copy()
+            
+            # Add warning text
+            warning_text = f"WARNING: Object detected at {self.last_detected_distance:.1f}m"
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            font_scale = 1
+            font_thickness = 2
+            text_color = (0, 0, 255)  # Red color in BGR
+            
+            # Get text size
+            text_size = cv2.getTextSize(warning_text, font, font_scale, font_thickness)[0]
+            
+            # Calculate text position (centered horizontally, near top vertically)
+            text_x = (array.shape[1] - text_size[0]) // 2
+            text_y = 50  # 50 pixels from top
+            
+            # Add semi-transparent red rectangle behind text
+            padding = 10
+            overlay = array.copy()
+            cv2.rectangle(overlay, 
+                         (text_x - padding, text_y - text_size[1] - padding),
+                         (text_x + text_size[0] + padding, text_y + padding),
+                         (0, 0, 255),
+                         -1)
+            # Apply transparency
+            alpha = 0.3
+            array = cv2.addWeighted(overlay, alpha, array, 1 - alpha, 0)
+            
+            # Add text
+            cv2.putText(array, warning_text, (text_x, text_y), font, font_scale, text_color, font_thickness)
+        
         self.sensor_data['camera_image'] = array
         
     def _lidar_callback(self, point_cloud):
@@ -232,10 +269,19 @@ class SensorFusionVehicle:
         velocity = self.vehicle.get_velocity()
         speed = 3.6 * math.sqrt(velocity.x**2 + velocity.y**2 + velocity.z**2)  # km/h
         
+        # Reset warning flag
+        self.warning_active = False
+        self.last_detected_distance = None
+        
         # Process radar detections
         for detection in radar_data:
             # Calculate distance to detected object
             distance = detection.depth
+            
+            # Update warning status for any object within 10 meters
+            if distance < 10.0:
+                self.warning_active = True
+                self.last_detected_distance = distance
             
             # If object is too close and we're moving
             if distance < 5.0 and speed > 5.0:  # 5 meters and 5 km/h thresholds
