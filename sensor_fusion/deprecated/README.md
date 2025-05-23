@@ -39,6 +39,12 @@ python multi_sensor_vehicle.py --no-camera --no-lidar  # Only radar enabled
 # Adjust number of traffic vehicles
 python multi_sensor_vehicle.py --num-traffic 10  # Spawn 10 traffic vehicles
 python multi_sensor_vehicle.py --num-traffic 0   # No traffic vehicles
+
+# Enable spectator camera to follow the ego vehicle
+python multi_sensor_vehicle.py --spectator
+
+# Manual vehicle control
+# In the toggle window, press 'm' to enable or disable manual mode. When manual mode is enabled, use WASD to drive the vehicle. The toggle window must be focused for keypresses to register.
 ```
 
 ## Sensor Configuration

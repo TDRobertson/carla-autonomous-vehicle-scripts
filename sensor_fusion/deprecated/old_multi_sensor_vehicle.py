@@ -9,6 +9,8 @@ import numpy as np
 import cv2
 import math
 import argparse
+import threading
+import pygame
 
 # Add the CARLA Python API directory to the path
 try:
@@ -69,9 +71,13 @@ class SensorFusionVehicle:
         self.emergency_stop_duration = 0
         self.warning_active = False  # New flag for radar warning
         self.last_detected_distance = None  # Store the last detected distance
+        self.last_detected_world_location = None  # Store the last detected object's world location
         
         # Get the spectator
         self.spectator = self.world.get_spectator()
+        
+        # Manual control state
+        pass  # Manual mode now handled in main loop
         
     def update_spectator_camera(self):
         """Update spectator camera to follow ego vehicle"""
@@ -217,6 +223,7 @@ class SensorFusionVehicle:
     
     def _camera_callback(self, image):
         """Process camera data"""
+        print(f"Camera callback: warning_active={self.warning_active}, last_detected_distance={self.last_detected_distance}")
         array = np.frombuffer(image.raw_data, dtype=np.dtype("uint8"))
         array = np.reshape(array, (image.height, image.width, 4))
         array = array[:, :, :3]
@@ -254,6 +261,23 @@ class SensorFusionVehicle:
             
             # Add text
             cv2.putText(array, warning_text, (text_x, text_y), font, font_scale, text_color, font_thickness)
+
+            # Draw a line from camera center to detected object if available
+            if self.last_detected_world_location is not None:
+                # Camera intrinsics
+                w = image.width
+                h = image.height
+                fov = float(self.camera.attributes.get('fov', 90))
+                K = self._build_projection_matrix(w, h, fov)
+                # Get camera world transform
+                camera_transform = self.camera.get_transform()
+                # Project camera origin and detected point
+                points3d = [camera_transform.location, self.last_detected_world_location]
+                points_2d = self._get_screen_points(self.camera, K, w, h, points3d)
+                # Draw line if both points are in front of camera and within image bounds
+                p0, p1 = points_2d[0], points_2d[1]
+                if all(0 <= p < w for p in [p0[0], p1[0]]) and all(0 <= p < h for p in [p0[1], p1[1]]):
+                    cv2.line(array, (int(p0[0]), int(p0[1])), (int(p1[0]), int(p1[1])), (0,255,255), 3)
         
         self.sensor_data['camera_image'] = array
         
@@ -265,6 +289,7 @@ class SensorFusionVehicle:
         
     def _radar_callback(self, radar_data):
         """Process radar data and adjust vehicle behavior"""
+        print(f"Radar callback: {len(radar_data)} detections")
         # Get current vehicle velocity
         velocity = self.vehicle.get_velocity()
         speed = 3.6 * math.sqrt(velocity.x**2 + velocity.y**2 + velocity.z**2)  # km/h
@@ -272,21 +297,33 @@ class SensorFusionVehicle:
         # Reset warning flag
         self.warning_active = False
         self.last_detected_distance = None
+        self.last_detected_world_location = None
         
         # Process radar detections
+        min_distance = float('inf')
+        closest_location = None
         for detection in radar_data:
+            print(f"Detection: depth={detection.depth}, azimuth={detection.azimuth}, altitude={detection.altitude}")
             # Calculate distance to detected object
             distance = detection.depth
-            
+            # Calculate world location of detection
+            radar_transform = self.radar.get_transform()
+            rel_x = distance * math.cos(detection.azimuth) * math.cos(detection.altitude)
+            rel_y = distance * math.sin(detection.azimuth) * math.cos(detection.altitude)
+            rel_z = distance * math.sin(detection.altitude)
+            detection_location = radar_transform.transform(carla.Location(x=rel_x, y=rel_y, z=rel_z))
             # Update warning status for any object within 10 meters
-            if distance < 10.0:
+            if distance < 10.0 and distance < min_distance:
                 self.warning_active = True
                 self.last_detected_distance = distance
-            
+                min_distance = distance
+                closest_location = detection_location
             # If object is too close and we're moving
             if distance < 5.0 and speed > 5.0:  # 5 meters and 5 km/h thresholds
                 self._handle_close_object(distance)
                 break
+        if self.warning_active and closest_location is not None:
+            self.last_detected_world_location = closest_location
         else:
             # No close objects detected, resume normal operation
             self._resume_normal_operation()
@@ -330,6 +367,32 @@ class SensorFusionVehicle:
                 actor.destroy()
         print("Cleanup complete.")
 
+    def _build_projection_matrix(self, w, h, fov):
+        focal = w / (2.0 * np.tan(fov * np.pi / 360.0))
+        K = np.identity(3)
+        K[0, 0] = K[1, 1] = focal
+        K[0, 2] = w / 2.0
+        K[1, 2] = h / 2.0
+        return K
+
+    def _get_screen_points(self, camera, K, image_w, image_h, points3d):
+        world_2_camera = np.array(camera.get_transform().get_inverse_matrix())
+        points_temp = []
+        for p in points3d:
+            points_temp += [p.x, p.y, p.z, 1]
+        points = np.array(points_temp).reshape(-1, 4).T
+        points_camera = np.dot(world_2_camera, points)
+        points = np.array([
+            points_camera[1],
+            points_camera[2] * -1,
+            points_camera[0]])
+        points_2d = np.dot(K, points)
+        points_2d = np.array([
+            points_2d[0, :] / points_2d[2, :],
+            points_2d[1, :] / points_2d[2, :],
+            points_2d[2, :]]).T
+        return points_2d
+
 def main():
     """Main function to run the sensor fusion vehicle"""
     # Parse command line arguments
@@ -350,6 +413,12 @@ def main():
         spectator_mode=args.spectator
     )
     
+    pygame.init()
+    screen = pygame.display.set_mode((400, 100))
+    pygame.display.set_caption('CARLA Manual Mode Toggle (press M)')
+
+    manual_mode = False
+
     try:
         # Spawn the ego vehicle
         vehicle = sensor_fusion.spawn_ego_vehicle()
@@ -358,14 +427,40 @@ def main():
         # Spawn traffic
         sensor_fusion.spawn_traffic()
         print("Traffic spawned successfully!")
-        print("Press Ctrl+C to exit...")
+        print("Press Ctrl+C or close the window to exit...")
         
         # Main simulation loop
         while True:
+            # Listen for manual mode toggle and WASD control
+            for event in pygame.event.get():
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_m:
+                        manual_mode = not manual_mode
+                        if manual_mode:
+                            print("Manual mode ON. Use WASD to control the vehicle. Press 'm' to toggle manual mode off.")
+                            sensor_fusion.vehicle.set_autopilot(False)
+                        else:
+                            print("Manual mode OFF. Returning to autopilot.")
+                            sensor_fusion.vehicle.set_autopilot(True, sensor_fusion.traffic_manager.get_port())
+                if event.type == pygame.QUIT:
+                    raise KeyboardInterrupt
+
+            if manual_mode:
+                keys = pygame.key.get_pressed()
+                control = carla.VehicleControl()
+                if keys[pygame.K_w]:
+                    control.throttle = 1.0
+                if keys[pygame.K_s]:
+                    control.brake = 1.0
+                if keys[pygame.K_a]:
+                    control.steer = -1.0
+                if keys[pygame.K_d]:
+                    control.steer = 1.0
+                sensor_fusion.vehicle.apply_control(control)
+
             # Update spectator camera if enabled
             if args.spectator:
                 sensor_fusion.update_spectator_camera()
-                
             # Tick the world to advance the simulation
             sensor_fusion.world.tick()
             time.sleep(0.05)  # Cap at 20 FPS
