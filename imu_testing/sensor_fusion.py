@@ -10,6 +10,11 @@ class SensorFusion:
         self.kf = KalmanFilter()
         self.enable_spoofing = enable_spoofing
         
+        # Initialize spoofer first
+        self.spoofer = None
+        if self.enable_spoofing:
+            self.spoofer = GPSSpoofer([0, 0, 0], strategy=spoofing_strategy)
+        
         # Initialize sensors
         self.setup_sensors()
         
@@ -18,10 +23,6 @@ class SensorFusion:
         self.imu_data = None
         self.fused_position = None
         self.true_position = None
-        
-        # Initialize spoofer if enabled
-        if self.enable_spoofing:
-            self.spoofer = GPSSpoofer([0, 0, 0], strategy=spoofing_strategy)
         
     def setup_sensors(self):
         # Setup GPS
@@ -51,7 +52,7 @@ class SensorFusion:
         ])
         
         # Apply spoofing if enabled
-        if self.enable_spoofing:
+        if self.enable_spoofing and self.spoofer is not None:
             self.gps_data = self.spoofer.spoof_position(self.true_position)
         else:
             self.gps_data = self.true_position
@@ -146,7 +147,12 @@ def main():
     vehicle.set_autopilot(True)
     
     # Initialize sensor fusion with spoofing enabled
-    fusion = SensorFusion(vehicle, enable_spoofing=True, spoofing_strategy=SpoofingStrategy.GRADUAL_DRIFT)
+    # Change the strategy here to test different methods:
+    # SpoofingStrategy.GRADUAL_DRIFT --
+    # SpoofingStrategy.SUDDEN_JUMP
+    # SpoofingStrategy.RANDOM_WALK
+    # SpoofingStrategy.REPLAY
+    fusion = SensorFusion(vehicle, enable_spoofing=True, spoofing_strategy=SpoofingStrategy.REPLAY)
     
     try:
         while True:

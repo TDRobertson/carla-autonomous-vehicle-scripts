@@ -11,8 +11,9 @@ class SpoofingStrategy(Enum):
 
 class GPSSpoofer:
     def __init__(self, initial_position, strategy=SpoofingStrategy.GRADUAL_DRIFT):
-        self.initial_position = np.array(initial_position)
-        self.current_position = np.array(initial_position)
+        # Ensure initial_position is converted to float64
+        self.initial_position = np.array(initial_position, dtype=np.float64)
+        self.current_position = np.array(initial_position, dtype=np.float64)
         self.strategy = strategy
         self.time_start = time.time()
         self.replay_buffer = []
@@ -28,6 +29,9 @@ class GPSSpoofer:
         """
         Generate a spoofed position based on the selected strategy
         """
+        # Convert true_position to float64
+        true_position = np.array(true_position, dtype=np.float64)
+        
         if self.strategy == SpoofingStrategy.GRADUAL_DRIFT:
             return self._gradual_drift(true_position)
         elif self.strategy == SpoofingStrategy.SUDDEN_JUMP:
@@ -46,7 +50,7 @@ class GPSSpoofer:
             np.sin(elapsed_time) * self.drift_rate,
             np.cos(elapsed_time) * self.drift_rate,
             0.0  # Keep z-coordinate unchanged
-        ])
+        ], dtype=np.float64)
         return true_position + drift
     
     def _sudden_jump(self, true_position):
@@ -58,7 +62,7 @@ class GPSSpoofer:
                 random.uniform(-self.jump_magnitude, self.jump_magnitude),
                 random.uniform(-self.jump_magnitude, self.jump_magnitude),
                 0.0
-            ])
+            ], dtype=np.float64)
             self.current_position = true_position + jump
         return self.current_position
     
@@ -70,8 +74,8 @@ class GPSSpoofer:
             random.uniform(-self.random_walk_step, self.random_walk_step),
             random.uniform(-self.random_walk_step, self.random_walk_step),
             0.0
-        ])
-        self.current_position += step
+        ], dtype=np.float64)
+        self.current_position = true_position + step
         return self.current_position
     
     def _replay_attack(self, true_position):
@@ -96,6 +100,6 @@ class GPSSpoofer:
         """
         self.strategy = strategy
         self.time_start = time.time()
-        self.current_position = self.initial_position
+        self.current_position = self.initial_position.copy()
         self.replay_buffer = []
         self.replay_index = 0 
