@@ -702,4 +702,141 @@ def correct_replay(self, detected_replay):
    - Verify correction accuracy
    - Test system robustness
 
+## Sequential Attack Testing Results
 
+### Test Configuration
+
+- Each attack sequence ran for 30 seconds
+- Tests were conducted in the following order:
+  1. Gradual Drift Attack
+  2. Sudden Jump Attack
+  3. Random Walk Attack
+  4. Replay Attack
+
+### Results Analysis
+
+#### 1. Gradual Drift Attack
+
+- **Position Errors:**
+  - Average: 0.102 m
+  - Maximum: 0.123 m
+  - Minimum: 0.076 m
+  - Standard Deviation: 0.013 m
+- **Velocity Errors:**
+  - Average: 10.953 m/s
+  - Maximum: 135.391 m/s
+  - Minimum: 0.000 m/s
+  - Standard Deviation: 32.949 m/s
+- **Error Rate:** 0.0% (errors > 1.0m)
+
+**Analysis:**
+
+- Position errors remain very small, making this attack difficult to detect using position thresholds
+- High velocity errors provide a potential detection method through velocity monitoring
+- Consistent error pattern suggests gradual drift is effective at maintaining stealth
+
+#### 2. Sudden Jump Attack
+
+- **Position Errors:**
+  - Average: 5.403 m
+  - Maximum: 21.368 m
+  - Minimum: 0.572 m
+  - Standard Deviation: 4.767 m
+- **Velocity Errors:**
+  - Average: 29.085 m/s
+  - Maximum: 266.308 m/s
+  - Minimum: 0.000 m/s
+  - Standard Deviation: 45.752 m/s
+- **Error Rate:** 96.5% (errors > 1.0m)
+
+**Analysis:**
+
+- Large position errors make this attack easily detectable through simple threshold checks
+- Extreme velocity spikes provide additional detection indicators
+- High error rate suggests this attack is not suitable for stealth operations
+
+#### 3. Random Walk Attack
+
+- **Position Errors:**
+  - Average: 0.224 m
+  - Maximum: 0.423 m
+  - Minimum: 0.035 m
+  - Standard Deviation: 0.095 m
+- **Velocity Errors:**
+  - Average: 15.266 m/s
+  - Maximum: 138.171 m/s
+  - Minimum: 0.140 m/s
+  - Standard Deviation: 35.958 m/s
+- **Error Rate:** 0.0% (errors > 1.0m)
+
+**Analysis:**
+
+- Small position errors make this attack relatively stealthy against simple threshold detection
+- Moderate velocity errors provide some detection capability through velocity monitoring
+- Random nature makes prediction difficult but detection possible through statistical analysis
+
+#### 4. Replay Attack
+
+- **Position Errors:**
+  - Average: 3.204 m
+  - Maximum: 3.655 m
+  - Minimum: 0.020 m
+  - Standard Deviation: 0.623 m
+- **Velocity Errors:**
+  - Average: 13.219 m/s
+  - Maximum: 138.523 m/s
+  - Minimum: 0.119 m/s
+  - Standard Deviation: 36.699 m/s
+- **Error Rate:** 97.3% (errors > 1.0m)
+
+**Analysis:**
+
+- Moderate position errors but very consistent
+- High velocity errors provide strong detection indicators
+- High error rate makes this attack easily detectable through threshold checks
+
+### Key Findings
+
+1. **Attack Detectability:**
+
+   - Sudden Jump and Replay attacks are most easily detectable through simple threshold checks
+   - Gradual Drift and Random Walk are more stealthy and require more sophisticated detection
+   - Velocity errors provide better detection than position errors for all attack types
+
+2. **Error Patterns:**
+
+   - Position errors are more consistent in Replay attacks
+   - Velocity errors are highest in Sudden Jump attacks
+   - Gradual Drift shows the most subtle error patterns
+
+3. **Detection Methods:**
+
+   - Position-based threshold detection works well for Sudden Jump and Replay
+   - Velocity monitoring is crucial for detecting Gradual Drift
+   - Statistical analysis is effective for Random Walk detection
+
+4. **System Performance:**
+   - Kalman filter handles Gradual Drift well
+   - Sudden changes cause significant filter divergence
+   - Random patterns challenge filter adaptation
+   - Replay attacks show consistent error patterns
+
+### Recommendations
+
+1. **Detection Improvements:**
+
+   - Implement velocity-based threshold detection for Gradual Drift
+   - Add statistical analysis for Random Walk detection
+   - Use multiple metrics for attack classification
+
+2. **Filter Enhancements:**
+
+   - Improve adaptation to sudden changes
+   - Better handling of random patterns
+   - Enhanced replay attack detection
+
+3. **Future Testing:**
+   - Test with different attack durations
+   - Evaluate system recovery after attacks
+   - Analyze filter convergence times
+   - Test with varying attack intensities

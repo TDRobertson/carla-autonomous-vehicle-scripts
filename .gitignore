@@ -1,4 +1,4 @@
 .ipynb_checkpoints/
 jupyter_files/
-imu_testing/__pycache__/gps_spoofer.cpython-310.pyc
-imu_testing/__pycache__/kalman_filter.cpython-310.pyc
+__pycache__/*
+sensor_fusion_testing/test_results/*

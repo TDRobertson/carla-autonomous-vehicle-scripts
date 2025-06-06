@@ -57,7 +57,7 @@ class SensorFusion:
         else:
             self.gps_data = self.true_position
             
-        self.update_fusion()
+        self.update()
         
     def imu_callback(self, data):
         self.imu_data = {
@@ -73,7 +73,8 @@ class SensorFusion:
             ])
         }
         
-    def update_fusion(self):
+    def update(self):
+        """Update the sensor fusion state."""
         if self.gps_data is not None:
             # Predict step
             predicted_position = self.kf.predict()
@@ -86,6 +87,40 @@ class SensorFusion:
         
     def get_true_position(self):
         return self.true_position
+        
+    def get_true_velocity(self):
+        """Get the true velocity of the vehicle."""
+        if self.vehicle:
+            velocity = self.vehicle.get_velocity()
+            return np.array([velocity.x, velocity.y, velocity.z])
+        return None
+        
+    def get_fused_velocity(self):
+        """Get the fused velocity estimate."""
+        if self.fused_position is not None and hasattr(self, '_last_fused_position'):
+            dt = 0.1  # Assuming 10Hz update rate
+            velocity = (self.fused_position - self._last_fused_position) / dt
+            self._last_fused_position = self.fused_position.copy()
+            return velocity
+        elif self.fused_position is not None:
+            self._last_fused_position = self.fused_position.copy()
+        return None
+        
+    def get_imu_data(self):
+        """Get the current IMU data."""
+        return self.imu_data
+        
+    def get_kalman_metrics(self):
+        """Get current Kalman filter metrics."""
+        if self.kf:
+            metrics = {
+                'covariance': self.kf.P,
+                'kalman_gain': self.kf.K if self.kf.K is not None else np.zeros((6, 3))
+            }
+            if self.kf.y is not None:
+                metrics['innovation'] = self.kf.y
+            return metrics
+        return None
         
     def toggle_spoofing(self, enable=None):
         if enable is not None:

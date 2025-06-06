@@ -68,6 +68,182 @@ The spoofing module implements four distinct attack strategies:
      - Replay delay: 2.0 seconds
    - Simulates signal replay attacks
 
+## Sequential Attack Testing Environment
+
+The sequential attack testing environment provides a framework for testing the system's response to multiple spoofing attacks in sequence. This is crucial for evaluating the system's ability to detect and adapt to changing attack patterns.
+
+### 1. Test Structure
+
+The testing environment is implemented in `sequential_attack_test.py` and provides:
+
+- **Automated Attack Sequencing**: Automatically switches between different attack types
+- **Configurable Test Parameters**: Adjustable duration for each attack type
+- **Comprehensive Data Collection**: Records position data, error metrics, and timestamps
+- **Real-time Analysis**: Provides immediate feedback during testing
+- **Detailed Post-test Analysis**: Generates statistics for each attack type
+
+### 2. Data Collection for ML Training
+
+The system collects comprehensive data for machine learning model training:
+
+#### 2.1 Position and Velocity Data
+
+- True and fused positions
+- True and fused velocities
+- Position and velocity errors
+- Error rates and variances
+
+#### 2.2 IMU Data
+
+- Accelerometer readings
+- Gyroscope readings
+- Angular velocity measurements
+
+#### 2.3 Kalman Filter Metrics
+
+- Kalman gains
+- Innovation vectors
+- Innovation covariances
+
+#### 2.4 Statistical Features
+
+- Position variance
+- Velocity variance
+- Acceleration variance
+
+#### 2.5 Attack-specific Features
+
+- Attack type
+- Attack confidence
+- Attack duration
+
+#### 2.6 Environmental Features
+
+- Vehicle speed
+- Vehicle acceleration
+- Vehicle angular velocity
+
+#### 2.7 Temporal Features
+
+- Time since last update
+- Update frequency
+
+#### 2.8 Error Metrics
+
+- Position error rate
+- Velocity error rate
+- Acceleration error rate
+
+### 3. Data Visualization
+
+The system supports various visualization capabilities for analyzing the collected data:
+
+#### 3.1 Real-time Visualization
+
+- Position tracking plot
+- Error evolution over time
+- Velocity profiles
+- Attack type indicators
+
+#### 3.2 Post-test Analysis Plots
+
+- Error distribution histograms
+- Position error heatmaps
+- Velocity error patterns
+- Attack transition analysis
+
+#### 3.3 Statistical Visualizations
+
+- Box plots for error distributions
+- Scatter plots for position errors
+- Time series analysis
+- Correlation matrices
+
+#### 3.4 Attack-specific Visualizations
+
+- Attack signature plots
+- Transition analysis
+- Error pattern recognition
+- Detection confidence plots
+
+### 4. Running Tests
+
+To run a sequential attack test:
+
+1. Ensure CARLA server is running
+2. Execute the test script:
+   ```bash
+   python sequential_attack_test.py
+   ```
+3. The test will:
+   - Spawn a vehicle in CARLA
+   - Enable autopilot
+   - Run through each attack type (default 30 seconds each)
+   - Collect and analyze data
+   - Display detailed statistics
+
+### 5. Test Configuration
+
+The test sequence can be customized by modifying the attack sequences in the main function:
+
+```python
+tester.add_attack_sequence(
+    SpoofingStrategy.GRADUAL_DRIFT,
+    30.0,  # Duration in seconds
+    "Gradual Drift Attack"
+)
+```
+
+Each attack sequence requires:
+
+- Attack strategy type
+- Duration
+- Description
+
+### 6. Analysis Output
+
+The test provides detailed analysis for each attack type:
+
+- Average error
+- Maximum error
+- Minimum error
+- Error standard deviation
+- Velocity error statistics
+- Error rate analysis
+
+Example output:
+
+```
+Attack: Gradual Drift Attack
+Average Error: 0.123 meters
+Max Error: 0.145 meters
+Min Error: 0.098 meters
+Error Std Dev: 0.012 meters
+Average Velocity Error: 0.045 m/s
+Max Velocity Error: 0.067 m/s
+Average Error Rate: 0.023 m/s
+Max Error Rate: 0.034 m/s
+```
+
+### 7. Data Export
+
+The collected data can be exported in various formats for ML training:
+
+- CSV format for tabular data
+- JSON format for structured data
+- NumPy arrays for numerical analysis
+- Pandas DataFrames for data manipulation
+
+### 8. ML Training Preparation
+
+The collected data is structured to support:
+
+- Supervised learning (attack classification)
+- Unsupervised learning (anomaly detection)
+- Time series analysis
+- Pattern recognition
+- Feature engineering
+
 ## Implementation Details
 
 ### Sensor Fusion
@@ -181,3 +357,244 @@ The system can be configured through several parameters:
    - Develop more sophisticated attack patterns
    - Implement coordinated multi-sensor attacks
    - Add timing-based spoofing strategies
+
+## Visualization Capabilities
+
+The testing environment includes comprehensive visualization capabilities to help analyze the performance of the sensor fusion system under different attack scenarios. These visualizations are automatically generated during testing and saved to the `test_results` directory.
+
+### Real-time Visualizations
+
+During test execution, the following visualizations are updated in real-time:
+
+1. **Position Tracking**
+
+   - Plots true vs. fused positions over time
+   - Shows the trajectory of the vehicle and how well the fusion system tracks it
+   - Helps identify when and where the system loses track of the true position
+
+2. **Error Evolution**
+
+   - Shows how the position error changes over time
+   - Helps identify patterns in error behavior during different attack types
+   - Useful for understanding the system's response to attacks
+
+3. **Velocity Profiles**
+   - Compares true and fused velocity estimates
+   - Helps identify velocity estimation errors
+   - Useful for understanding how attacks affect velocity estimation
+
+### Post-test Analysis Plots
+
+After test completion, additional visualizations are generated:
+
+1. **Error Distribution**
+
+   - Histogram of position errors
+   - Shows the statistical distribution of errors
+   - Helps identify if errors follow a particular pattern
+
+2. **Position Error Heatmap**
+
+   - 2D heatmap showing error magnitude across the vehicle's path
+   - Helps identify areas where the system performs poorly
+   - Useful for understanding spatial patterns in errors
+
+3. **Attack Transitions**
+
+   - Shows when different attack types were active
+   - Helps correlate system performance with attack types
+   - Useful for understanding system behavior during attack switches
+
+4. **Metric Correlations**
+   - Correlation matrix of all collected metrics
+   - Helps identify relationships between different measurements
+   - Useful for feature selection in machine learning models
+
+### Using the Visualizations
+
+The visualizations are automatically saved in the `test_results` directory with the following naming convention:
+
+- `position_tracking_{attack_type}.png`
+- `error_evolution_{attack_type}.png`
+- `velocity_profiles_{attack_type}.png`
+- `error_distribution_{attack_type}.png`
+- `error_heatmap_{attack_type}.png`
+- `correlation_matrix.png`
+
+These visualizations can be used to:
+
+1. Compare performance across different attack types
+2. Identify patterns in system behavior
+3. Validate the effectiveness of the sensor fusion system
+4. Guide improvements to the system
+5. Support machine learning model development
+
+# Sensor Fusion Testing Environment
+
+This environment provides tools for testing and analyzing sensor fusion systems under various GPS spoofing attacks.
+
+## Features
+
+- Real-time sensor fusion testing in CARLA simulator
+- Multiple GPS spoofing attack strategies
+- Comprehensive data collection and analysis
+- Visualization tools for attack detection
+- Sequential attack testing capabilities
+
+## Components
+
+### 1. Sensor Fusion System
+
+- Integrates GPS and IMU data
+- Implements Kalman filtering
+- Handles sensor data fusion
+- Manages spoofing detection
+
+### 2. GPS Spoofer
+
+- Implements multiple spoofing strategies:
+  - Gradual Drift
+  - Sudden Jump
+  - Random Walk
+  - Replay Attack
+- Configurable attack parameters
+- Real-time position manipulation
+
+### 3. Spoofing Detector
+
+- Detects various types of spoofing attacks
+- Implements multiple detection methods
+- Provides confidence scores
+- Real-time attack classification
+
+### 4. Visualization Tools
+
+- Real-time position tracking
+- Error evolution plots
+- Velocity profile analysis
+- Error distribution visualization
+- Correlation matrix analysis
+- Position error heatmaps
+
+### 5. Sequential Attack Testing
+
+- Automated attack sequence execution
+- Configurable test parameters
+- Comprehensive data collection
+- Real-time analysis
+- Detailed post-test analysis
+
+## Data Collection
+
+The system collects the following data during testing:
+
+1. Position Data:
+
+   - True vehicle positions
+   - Fused position estimates
+   - Position errors
+   - Error rates
+
+2. Velocity Data:
+
+   - True vehicle velocities
+   - Fused velocity estimates
+   - Velocity errors
+   - Error statistics
+
+3. Sensor Data:
+
+   - IMU measurements
+   - GPS readings
+   - Kalman filter metrics
+
+4. Analysis Metrics:
+   - Error distributions
+   - Correlation matrices
+   - Attack detection rates
+   - Performance statistics
+
+## Running Tests
+
+### Basic Testing
+
+```bash
+python sensor_fusion.py
+```
+
+### Sequential Attack Testing
+
+```bash
+python sequential_attack_test.py
+```
+
+### Test Configuration
+
+- Modify attack sequences in `sequential_attack_test.py`
+- Adjust test parameters in the main function
+- Configure visualization options in `visualization.py`
+
+## Analysis Output
+
+The system provides comprehensive analysis including:
+
+1. Position Error Statistics:
+
+   - Average error
+   - Maximum error
+   - Minimum error
+   - Error standard deviation
+
+2. Velocity Error Statistics:
+
+   - Average velocity error
+   - Maximum velocity error
+   - Minimum velocity error
+   - Velocity error standard deviation
+
+3. Error Rate Analysis:
+
+   - Error rates above thresholds
+   - Attack detection rates
+   - False positive rates
+
+4. Visualization Outputs:
+   - Position tracking plots
+   - Error evolution graphs
+   - Velocity profiles
+   - Error distributions
+   - Correlation matrices
+   - Error heatmaps
+
+## Data Storage
+
+Test results are stored in:
+
+- Memory during test execution
+- Visualization files in the output directory
+- Analysis reports in the documentation
+
+## Requirements
+
+- CARLA Simulator
+- Python 3.7+
+- Required Python packages:
+  - numpy
+  - matplotlib
+  - carla
+  - dataclasses
+  - typing
+
+## Directory Structure
+
+```
+sensor_fusion_testing/
+├── sensor_fusion.py
+├── gps_spoofer.py
+├── spoofing_detector.py
+├── visualization.py
+├── sequential_attack_test.py
+├── kalman_filter.py
+├── README.md
+└── analysis.md
+```
