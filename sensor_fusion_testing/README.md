@@ -68,6 +68,38 @@ The spoofing module implements four distinct attack strategies:
      - Replay delay: 2.0 seconds
    - Simulates signal replay attacks
 
+## Machine Learning Integration (In Progress)
+
+The system is currently being enhanced with machine learning capabilities:
+
+1. **Attack Detection Model**
+
+   - Supervised learning for known attack patterns
+   - Feature extraction from sensor data
+   - Real-time classification of attack types
+   - Confidence scoring for detections
+
+2. **Zero-Day Attack Detection**
+   - One-class classification for anomaly detection
+   - Unsupervised learning approach
+   - Pattern recognition for unknown attacks
+   - Continuous learning system
+
+## Analysis and Results
+
+Detailed analysis of the system's performance and test results can be found in:
+
+- `analysis.md`: Comprehensive analysis in markdown format
+- `analysis.pdf`: Detailed technical report with visualizations
+
+Key metrics tracked:
+
+- Detection accuracy
+- False positive rates
+- System performance
+- Response times
+- Recovery capabilities
+
 ## Sequential Attack Testing Environment
 
 The sequential attack testing environment provides a framework for testing the system's response to multiple spoofing attacks in sequence. This is crucial for evaluating the system's ability to detect and adapt to changing attack patterns.
@@ -171,11 +203,15 @@ The system supports various visualization capabilities for analyzing the collect
 To run a sequential attack test:
 
 1. Ensure CARLA server is running
-2. Execute the test script:
+2. Install required dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. Execute the test script:
    ```bash
    python sequential_attack_test.py
    ```
-3. The test will:
+4. The test will:
    - Spawn a vehicle in CARLA
    - Enable autopilot
    - Run through each attack type (default 30 seconds each)
@@ -248,115 +284,53 @@ The collected data is structured to support:
 
 ### Sensor Fusion
 
-The `SensorFusion` class manages:
+The sensor fusion system is implemented in `sensor_fusion.py` and uses an Extended Kalman Filter to combine GPS and IMU measurements. The system maintains a continuous state estimate of the vehicle's position and velocity, with error correction based on sensor measurements.
 
-- Sensor initialization and data collection
-- Kalman filter integration
-- Spoofing injection
-- State estimation
+### Spoofing Detection
 
-### Kalman Filter
+The spoofing detection system is implemented in `spoofing_detector.py` and uses a combination of statistical analysis and machine learning to identify potential GPS spoofing attacks. The system can detect both known attack patterns and anomalies that may indicate zero-day attacks.
 
-The `KalmanFilter` class implements:
+### Data Processing
 
-- State prediction using constant velocity model
-- Measurement update using GPS data
-- Error covariance management
-- State estimation
+The data processing system is implemented in `data_processor.py` and handles:
 
-### GPS Spoofer
+- Raw sensor data preprocessing
+- Feature extraction
+- Data normalization
+- Statistical analysis
+- ML feature preparation
 
-The `GPSSpoofer` class provides:
+### Visualization
 
-- Multiple spoofing strategies
-- Configurable attack parameters
-- Real-time position manipulation
-- Strategy switching capability
+The visualization system is implemented in `visualization.py` and provides:
 
-## Results
-
-### Gradual Drift Spoofing Analysis
-
-#### Position Error Characteristics
-
-- **Average Error**: ~0.1 meters (10 cm)
-- **Error Stability**: Very stable with minimal fluctuation
-- **Error Range**: 0.100009 to 0.100010 meters
-
-#### Kalman Filter Performance
-
-1. **State Estimation**
-
-   - Maintains stable position estimates
-   - Effectively tracks vehicle motion
-   - Minimal divergence from true position
-
-2. **Spoofing Response**
-
-   - Successfully maintains consistent offset
-   - Preserves relative motion characteristics
-   - Demonstrates filter robustness
-
-3. **Height Estimation**
-   - Z-axis accuracy: ~0.002 meters
-   - Maintains ground-level tracking
-   - Minimal vertical drift
-
-#### Key Observations
-
-1. The Kalman filter effectively maintains tracking despite spoofing
-2. The gradual drift strategy creates a consistent, predictable offset
-3. The system demonstrates good stability and reliability
-4. The small error magnitude suggests effective sensor fusion
-
-## Usage
-
-1. Ensure CARLA simulator is running
-2. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-3. Run the sensor fusion system:
-   ```bash
-   python sensor_fusion.py
-   ```
-
-## Configuration
-
-The system can be configured through several parameters:
-
-### Kalman Filter
-
-- Process noise covariance (Q)
-- Measurement noise covariance (R)
-- State transition matrix (A)
-- Measurement matrix (H)
-
-### Spoofing Module
-
-- Drift rate
-- Jump magnitude
-- Random walk step size
-- Replay buffer size
+- Real-time data plotting
+- Error visualization
+- Attack pattern visualization
+- Statistical analysis plots
+- Performance metrics display
 
 ## Future Work
 
-1. **Enhanced Detection**
+1. **Enhanced ML Integration**
 
-   - Implement statistical anomaly detection
-   - Add machine learning-based spoofing detection
-   - Develop real-time attack classification
+   - Implement deep learning models
+   - Add transfer learning capabilities
+   - Improve zero-day detection
+   - Optimize model performance
 
-2. **Improved Fusion**
+2. **System Optimization**
 
-   - Incorporate additional sensors
-   - Implement more sophisticated motion models
-   - Add adaptive noise estimation
+   - Reduce computational overhead
+   - Improve real-time performance
+   - Enhance detection accuracy
+   - Minimize false positives
 
-3. **Advanced Spoofing**
-   - Develop more sophisticated attack patterns
-   - Implement coordinated multi-sensor attacks
-   - Add timing-based spoofing strategies
+3. **Extended Testing**
+   - More attack scenarios
+   - Edge case handling
+   - System stress testing
+   - Long-term reliability testing
 
 ## Visualization Capabilities
 
