@@ -1,8 +1,17 @@
 import carla
 import numpy as np
 import time
+from typing import Optional, Dict, List, Tuple
+from collections import deque
+from dataclasses import dataclass
 from kalman_filter import KalmanFilter
 from gps_spoofer import GPSSpoofer, SpoofingStrategy
+
+@dataclass
+class SensorData:
+    timestamp: float
+    data: np.ndarray
+    type: str  # 'gps' or 'imu'
 
 class SensorFusion:
     def __init__(self, vehicle, enable_spoofing=False, spoofing_strategy=SpoofingStrategy.GRADUAL_DRIFT):
@@ -18,11 +27,23 @@ class SensorFusion:
         # Initialize sensors
         self.setup_sensors()
         
-        # Data storage
-        self.gps_data = None
-        self.imu_data = None
+        # Data storage with timestamps
+        self.gps_buffer = deque(maxlen=100)  # Store last 100 GPS measurements
+        self.imu_buffer = deque(maxlen=100)  # Store last 100 IMU measurements
         self.fused_position = None
+        self.fused_velocity = None
         self.true_position = None
+        self.true_velocity = None
+        
+        # Synchronization parameters
+        self.sync_window = 0.1  # 100ms window for synchronization
+        self.last_sync_time = None
+        
+        # Traffic state detection
+        self.velocity_threshold = 0.5  # m/s
+        self.stop_duration_threshold = 1.0  # seconds
+        self.last_stop_time = None
+        self.is_stopped = False
         
     def setup_sensors(self):
         # Setup GPS
@@ -53,74 +74,132 @@ class SensorFusion:
         
         # Apply spoofing if enabled
         if self.enable_spoofing and self.spoofer is not None:
-            self.gps_data = self.spoofer.spoof_position(self.true_position)
+            gps_data = self.spoofer.spoof_position(self.true_position)
         else:
-            self.gps_data = self.true_position
+            gps_data = self.true_position
             
+        # Store GPS data with timestamp
+        self.gps_buffer.append(SensorData(
+            timestamp=time.time(),
+            data=gps_data,
+            type='gps'
+        ))
+        
         self.update()
         
     def imu_callback(self, data):
-        self.imu_data = {
-            'acceleration': np.array([
-                data.accelerometer.x,
-                data.accelerometer.y,
-                data.accelerometer.z
-            ]),
-            'gyroscope': np.array([
-                data.gyroscope.x,
-                data.gyroscope.y,
-                data.gyroscope.z
-            ])
-        }
+        # Store IMU data with timestamp
+        self.imu_buffer.append(SensorData(
+            timestamp=time.time(),
+            data={
+                'acceleration': np.array([
+                    data.accelerometer.x,
+                    data.accelerometer.y,
+                    data.accelerometer.z
+                ]),
+                'gyroscope': np.array([
+                    data.gyroscope.x,
+                    data.gyroscope.y,
+                    data.gyroscope.z
+                ])
+            },
+            type='imu'
+        ))
+        
+    def _detect_traffic_state(self) -> bool:
+        """Detect if the vehicle is stopped at a traffic light."""
+        if self.true_velocity is None:
+            return False
+            
+        velocity_magnitude = np.linalg.norm(self.true_velocity)
+        current_time = time.time()
+        
+        if velocity_magnitude < self.velocity_threshold:
+            if not self.is_stopped:
+                self.last_stop_time = current_time
+                self.is_stopped = True
+            elif current_time - self.last_stop_time > self.stop_duration_threshold:
+                return True
+        else:
+            self.is_stopped = False
+            self.last_stop_time = None
+            
+        return False
+        
+    def _synchronize_data(self) -> Tuple[Optional[np.ndarray], Optional[Dict]]:
+        """Synchronize GPS and IMU data within the time window."""
+        if not self.gps_buffer or not self.imu_buffer:
+            return None, None
+            
+        current_time = time.time()
+        
+        # Find the most recent GPS measurement
+        gps_data = self.gps_buffer[-1]
+        
+        # Find the closest IMU measurement within the sync window
+        closest_imu = None
+        min_time_diff = float('inf')
+        
+        for imu_data in reversed(self.imu_buffer):
+            time_diff = abs(imu_data.timestamp - gps_data.timestamp)
+            if time_diff < self.sync_window and time_diff < min_time_diff:
+                closest_imu = imu_data
+                min_time_diff = time_diff
+                
+        if closest_imu is None:
+            return gps_data.data, None
+            
+        return gps_data.data, closest_imu.data
         
     def update(self):
-        """Update the sensor fusion state."""
-        if self.gps_data is not None:
-            # Predict step
-            predicted_position = self.kf.predict()
+        """Update the sensor fusion state with synchronized data."""
+        # Synchronize data
+        gps_data, imu_data = self._synchronize_data()
+        if gps_data is None:
+            return
             
-            # Update step with GPS measurement
-            self.fused_position = self.kf.update(self.gps_data)
+        # Detect traffic state
+        is_at_traffic_light = self._detect_traffic_state()
+        
+        # Get current time
+        current_time = time.time()
+        
+        # Predict step
+        predicted_position, predicted_velocity = self.kf.predict(current_time)
+        
+        # Update step with GPS measurement
+        self.fused_position, self.fused_velocity = self.kf.update(gps_data, current_time)
+        
+        # Get true velocity
+        if self.vehicle:
+            velocity = self.vehicle.get_velocity()
+            self.true_velocity = np.array([velocity.x, velocity.y, velocity.z])
             
     def get_fused_position(self):
         return self.fused_position
+        
+    def get_fused_velocity(self):
+        return self.fused_velocity
         
     def get_true_position(self):
         return self.true_position
         
     def get_true_velocity(self):
-        """Get the true velocity of the vehicle."""
-        if self.vehicle:
-            velocity = self.vehicle.get_velocity()
-            return np.array([velocity.x, velocity.y, velocity.z])
-        return None
-        
-    def get_fused_velocity(self):
-        """Get the fused velocity estimate."""
-        if self.fused_position is not None and hasattr(self, '_last_fused_position'):
-            dt = 0.1  # Assuming 10Hz update rate
-            velocity = (self.fused_position - self._last_fused_position) / dt
-            self._last_fused_position = self.fused_position.copy()
-            return velocity
-        elif self.fused_position is not None:
-            self._last_fused_position = self.fused_position.copy()
-        return None
+        return self.true_velocity
         
     def get_imu_data(self):
         """Get the current IMU data."""
-        return self.imu_data
+        if self.imu_buffer:
+            return self.imu_buffer[-1].data
+        return None
         
     def get_kalman_metrics(self):
         """Get current Kalman filter metrics."""
-        if self.kf:
-            metrics = {
-                'covariance': self.kf.P,
-                'kalman_gain': self.kf.K if self.kf.K is not None else np.zeros((6, 3))
-            }
-            if self.kf.y is not None:
-                metrics['innovation'] = self.kf.y
-            return metrics
-        return None
+        return {
+            'covariance': self.kf.get_covariance(),
+            'kalman_gain': self.kf.get_kalman_gain(),
+            'innovation': self.kf.get_innovation()
+        }
         
     def toggle_spoofing(self, enable=None):
         if enable is not None:
