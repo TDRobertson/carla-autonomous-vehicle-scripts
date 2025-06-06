@@ -6,6 +6,7 @@ from collections import deque
 from dataclasses import dataclass
 from kalman_filter import KalmanFilter
 from gps_spoofer import GPSSpoofer, SpoofingStrategy
+import warnings
 
 @dataclass
 class SensorData:
@@ -16,24 +17,25 @@ class SensorData:
 class SensorFusion:
     def __init__(self, vehicle, enable_spoofing=False, spoofing_strategy=SpoofingStrategy.GRADUAL_DRIFT):
         self.vehicle = vehicle
-        self.kf = KalmanFilter()
-        self.enable_spoofing = enable_spoofing
         
-        # Initialize spoofer first
-        self.spoofer = None
-        if self.enable_spoofing:
-            self.spoofer = GPSSpoofer([0, 0, 0], strategy=spoofing_strategy)
-        
-        # Initialize sensors
-        self.setup_sensors()
-        
-        # Data storage with timestamps
+        # Initialize data buffers first
         self.gps_buffer = deque(maxlen=100)  # Store last 100 GPS measurements
         self.imu_buffer = deque(maxlen=100)  # Store last 100 IMU measurements
+        
+        # Initialize state variables
         self.fused_position = None
         self.fused_velocity = None
         self.true_position = None
         self.true_velocity = None
+        
+        # Initialize Kalman filter
+        self.kf = KalmanFilter()
+        
+        # Initialize spoofer
+        self.spoofer = None
+        if enable_spoofing:
+            self.spoofer = GPSSpoofer([0, 0, 0], strategy=spoofing_strategy)
+        self.enable_spoofing = enable_spoofing
         
         # Synchronization parameters
         self.sync_window = 0.1  # 100ms window for synchronization
@@ -44,6 +46,12 @@ class SensorFusion:
         self.stop_duration_threshold = 1.0  # seconds
         self.last_stop_time = None
         self.is_stopped = False
+        
+        # Initialize sensors last
+        self.setup_sensors()
+        
+        # Suppress numpy warnings
+        warnings.filterwarnings('ignore', category=RuntimeWarning, module='numpy')
         
     def setup_sensors(self):
         # Setup GPS
@@ -65,46 +73,52 @@ class SensorFusion:
         self.imu_sensor.listen(self.imu_callback)
         
     def gps_callback(self, data):
-        # Store true position
-        self.true_position = np.array([
-            data.transform.location.x,
-            data.transform.location.y,
-            data.transform.location.z
-        ])
-        
-        # Apply spoofing if enabled
-        if self.enable_spoofing and self.spoofer is not None:
-            gps_data = self.spoofer.spoof_position(self.true_position)
-        else:
-            gps_data = self.true_position
+        try:
+            # Store true position
+            self.true_position = np.array([
+                data.transform.location.x,
+                data.transform.location.y,
+                data.transform.location.z
+            ])
             
-        # Store GPS data with timestamp
-        self.gps_buffer.append(SensorData(
-            timestamp=time.time(),
-            data=gps_data,
-            type='gps'
-        ))
-        
-        self.update()
+            # Apply spoofing if enabled
+            if self.enable_spoofing and self.spoofer is not None:
+                gps_data = self.spoofer.spoof_position(self.true_position)
+            else:
+                gps_data = self.true_position
+                
+            # Store GPS data with timestamp
+            self.gps_buffer.append(SensorData(
+                timestamp=time.time(),
+                data=gps_data,
+                type='gps'
+            ))
+            
+            self.update()
+        except Exception as e:
+            print(f"Error in GPS callback: {str(e)}")
         
     def imu_callback(self, data):
-        # Store IMU data with timestamp
-        self.imu_buffer.append(SensorData(
-            timestamp=time.time(),
-            data={
-                'acceleration': np.array([
-                    data.accelerometer.x,
-                    data.accelerometer.y,
-                    data.accelerometer.z
-                ]),
-                'gyroscope': np.array([
-                    data.gyroscope.x,
-                    data.gyroscope.y,
-                    data.gyroscope.z
-                ])
-            },
-            type='imu'
-        ))
+        try:
+            # Store IMU data with timestamp
+            self.imu_buffer.append(SensorData(
+                timestamp=time.time(),
+                data={
+                    'acceleration': np.array([
+                        data.accelerometer.x,
+                        data.accelerometer.y,
+                        data.accelerometer.z
+                    ]),
+                    'gyroscope': np.array([
+                        data.gyroscope.x,
+                        data.gyroscope.y,
+                        data.gyroscope.z
+                    ])
+                },
+                type='imu'
+            ))
+        except Exception as e:
+            print(f"Error in IMU callback: {str(e)}")
         
     def _detect_traffic_state(self) -> bool:
         """Detect if the vehicle is stopped at a traffic light."""
@@ -153,27 +167,30 @@ class SensorFusion:
         
     def update(self):
         """Update the sensor fusion state with synchronized data."""
-        # Synchronize data
-        gps_data, imu_data = self._synchronize_data()
-        if gps_data is None:
-            return
+        try:
+            # Synchronize data
+            gps_data, imu_data = self._synchronize_data()
+            if gps_data is None:
+                return
+                
+            # Detect traffic state
+            is_at_traffic_light = self._detect_traffic_state()
             
-        # Detect traffic state
-        is_at_traffic_light = self._detect_traffic_state()
-        
-        # Get current time
-        current_time = time.time()
-        
-        # Predict step
-        predicted_position, predicted_velocity = self.kf.predict(current_time)
-        
-        # Update step with GPS measurement
-        self.fused_position, self.fused_velocity = self.kf.update(gps_data, current_time)
-        
-        # Get true velocity
-        if self.vehicle:
-            velocity = self.vehicle.get_velocity()
-            self.true_velocity = np.array([velocity.x, velocity.y, velocity.z])
+            # Get current time
+            current_time = time.time()
+            
+            # Predict step
+            predicted_position, predicted_velocity = self.kf.predict(current_time)
+            
+            # Update step with GPS measurement
+            self.fused_position, self.fused_velocity = self.kf.update(gps_data, current_time)
+            
+            # Get true velocity
+            if self.vehicle:
+                velocity = self.vehicle.get_velocity()
+                self.true_velocity = np.array([velocity.x, velocity.y, velocity.z])
+        except Exception as e:
+            print(f"Error in update: {str(e)}")
             
     def get_fused_position(self):
         return self.fused_position
