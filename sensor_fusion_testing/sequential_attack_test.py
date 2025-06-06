@@ -1,6 +1,8 @@
 import carla
 import numpy as np
 import time
+import json
+import os
 from typing import List, Tuple, Dict, Optional
 from dataclasses import dataclass
 from gps_spoofer import GPSSpoofer, SpoofingStrategy
@@ -269,6 +271,52 @@ class SequentialAttackTester:
         """Get the test results."""
         return self.results
         
+    def save_results(self, output_dir: str = "test_results"):
+        """Save test results to files for future analysis."""
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+            
+        # Save raw data
+        for strategy, data in self.results.items():
+            strategy_dir = os.path.join(output_dir, str(strategy))
+            if not os.path.exists(strategy_dir):
+                os.makedirs(strategy_dir)
+                
+            # Convert numpy arrays to lists for JSON serialization
+            serializable_data = {
+                'true_positions': [pos.tolist() for pos in data['true_positions']],
+                'fused_positions': [pos.tolist() for pos in data['fused_positions']],
+                'true_velocities': [vel.tolist() for vel in data['true_velocities']],
+                'fused_velocities': [vel.tolist() for vel in data['fused_velocities']],
+                'position_errors': data['position_errors'],
+                'velocity_errors': data['velocity_errors'],
+                'timestamps': data['timestamps']
+            }
+            
+            # Save as JSON
+            with open(os.path.join(strategy_dir, 'raw_data.json'), 'w') as f:
+                json.dump(serializable_data, f, indent=2)
+                
+            # Save statistics
+            stats = {
+                'position_error_stats': {
+                    'mean': float(np.mean(data['position_errors'])),
+                    'std': float(np.std(data['position_errors'])),
+                    'max': float(np.max(data['position_errors'])),
+                    'min': float(np.min(data['position_errors']))
+                },
+                'velocity_error_stats': {
+                    'mean': float(np.mean(data['velocity_errors'])),
+                    'std': float(np.std(data['velocity_errors'])),
+                    'max': float(np.max(data['velocity_errors'])),
+                    'min': float(np.min(data['velocity_errors']))
+                },
+                'error_rate': float(np.mean(np.array(data['position_errors']) > 1.0) * 100)
+            }
+            
+            with open(os.path.join(strategy_dir, 'statistics.json'), 'w') as f:
+                json.dump(stats, f, indent=2)
+                
     def analyze_results(self):
         """Analyze and print statistics of the test results."""
         print("\nTest Results Analysis:")
@@ -313,6 +361,9 @@ class SequentialAttackTester:
             
         # Save all visualizations
         self.visualizer.save_all_plots("test_results")
+        
+        # Save raw data and statistics
+        self.save_results()
         
         # Generate correlation matrix for all metrics
         all_metrics = {}
