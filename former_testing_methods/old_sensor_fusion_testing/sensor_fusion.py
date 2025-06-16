@@ -2,7 +2,7 @@ import carla
 import numpy as np
 import time
 from kalman_filter import KalmanFilter
-from gps_spoofer import GPSSpoofer, SpoofingStrategy
+from sensor_fusion_testing.integrated_system.gps_spoofer import GPSSpoofer, SpoofingStrategy
 
 class SensorFusion:
     def __init__(self, vehicle, enable_spoofing=False, spoofing_strategy=SpoofingStrategy.GRADUAL_DRIFT):

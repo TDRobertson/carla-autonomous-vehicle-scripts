@@ -1,0 +1,6 @@
+numpy>=1.19.0
+carla>=0.9.15
+scipy>=1.7.0
+matplotlib>=3.4.0
+pytest>=6.2.0
+pytest-cov>=2.12.0 

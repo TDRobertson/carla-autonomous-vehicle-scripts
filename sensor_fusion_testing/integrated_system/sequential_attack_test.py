@@ -5,7 +5,7 @@ import json
 import os
 from typing import List, Tuple, Dict, Optional
 from dataclasses import dataclass
-from gps_spoofer import GPSSpoofer, SpoofingStrategy
+from sensor_fusion_testing.integrated_system.gps_spoofer import GPSSpoofer, SpoofingStrategy
 from sensor_fusion import SensorFusion
 from visualization import DataVisualizer
 

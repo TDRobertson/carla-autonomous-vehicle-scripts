@@ -4,4 +4,4 @@ __pycache__/*
 sensor_fusion_testing/test_results/*
 sensor_fusion_testing/__pycache__/*
 sensor_fusion_testing/ml_data/*
-real-time-carla-kalman-filter/*
+.cursor/*
