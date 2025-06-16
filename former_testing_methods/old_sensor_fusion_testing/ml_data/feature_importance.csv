@@ -1,0 +1,21 @@
+feature,correlation,abs_correlation,description
+position_error_3d,0.9999999999999999,0.9999999999999999,3D Euclidean position error
+position_error,0.9999999999999999,0.9999999999999999,Direct position error
+position_error_ma,0.8151202463547503,0.8151202463547503,Moving average of position error
+velocity_error_ma,0.5090820690582756,0.5090820690582756,Moving average of velocity error
+fused_z,-0.47263031868771704,0.47263031868771704,Fused position Z component
+velocity_error,0.4454156670658638,0.4454156670658638,Direct velocity error
+velocity_error_3d,0.4453720927554521,0.4453720927554521,3D Euclidean velocity error
+fused_vel_z,-0.4329642957220623,0.4329642957220623,Fused velocity Z component
+fused_vel_x,0.37118816279285766,0.37118816279285766,Fused velocity X component
+fused_vel_y,0.28249986929234105,0.28249986929234105,Fused velocity Y component
+position_error_std,0.16645146556717913,0.16645146556717913,Standard deviation of position error
+true_vel_y,-0.1616349650007821,0.1616349650007821,True velocity Y component
+fused_x,0.15760397069182877,0.15760397069182877,Fused position X component
+true_vel_x,-0.14542224922170702,0.14542224922170702,True velocity X component
+true_x,0.13380175199873406,0.13380175199873406,True position X component
+velocity_error_std,0.11664784305060685,0.11664784305060685,Standard deviation of velocity error
+true_y,-0.10058663641711636,0.10058663641711636,True position Y component
+true_z,0.07654339040830375,0.07654339040830375,True position Z component
+fused_y,-0.07185272457956636,0.07185272457956636,Fused position Y component
+true_vel_z,0.005226161964514766,0.005226161964514766,True velocity Z component
