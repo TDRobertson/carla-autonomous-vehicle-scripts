@@ -1,13 +1,13 @@
 import carla
 import numpy as np
 import time
-from kalman_filter import KalmanFilter
+from kalman_filter import ExtendedKalmanFilter
 from gps_spoofer import GPSSpoofer, SpoofingStrategy
 
 class SensorFusion:
     def __init__(self, vehicle, enable_spoofing=False, spoofing_strategy=SpoofingStrategy.GRADUAL_DRIFT):
         self.vehicle = vehicle
-        self.kf = KalmanFilter()
+        self.kf = ExtendedKalmanFilter()
         self.enable_spoofing = enable_spoofing
         
         # Initialize spoofer first
@@ -23,6 +23,7 @@ class SensorFusion:
         self.imu_data = None
         self.fused_position = None
         self.true_position = None
+        self.last_imu_timestamp = 0
         
     def setup_sensors(self):
         # Setup GPS
@@ -57,31 +58,27 @@ class SensorFusion:
         else:
             self.gps_data = self.true_position
             
-        self.update()
+        # Initialize EKF if not initialized
+        if not self.kf.is_initialized():
+            self.kf.initialize_with_gnss(data)
+        else:
+            # Update with GPS measurement
+            self.kf.correct_state_with_gnss(data)
+            
+        # Get the fused position
+        self.fused_position = self.kf.get_location()
         
     def imu_callback(self, data):
-        self.imu_data = {
-            'acceleration': np.array([
-                data.accelerometer.x,
-                data.accelerometer.y,
-                data.accelerometer.z
-            ]),
-            'gyroscope': np.array([
-                data.gyroscope.x,
-                data.gyroscope.y,
-                data.gyroscope.z
-            ])
-        }
+        self.imu_data = data
         
-    def update(self):
-        """Update the sensor fusion state."""
-        if self.gps_data is not None:
-            # Predict step
-            predicted_position = self.kf.predict()
+        # Only process IMU data if EKF is initialized
+        if self.kf.is_initialized():
+            # Predict state using IMU
+            self.kf.predict_state_with_imu(data)
             
-            # Update step with GPS measurement
-            self.fused_position = self.kf.update(self.gps_data)
-            
+            # Get the fused position
+            self.fused_position = self.kf.get_location()
+        
     def get_fused_position(self):
         return self.fused_position
         
@@ -97,13 +94,8 @@ class SensorFusion:
         
     def get_fused_velocity(self):
         """Get the fused velocity estimate."""
-        if self.fused_position is not None and hasattr(self, '_last_fused_position'):
-            dt = 0.1  # Assuming 10Hz update rate
-            velocity = (self.fused_position - self._last_fused_position) / dt
-            self._last_fused_position = self.fused_position.copy()
-            return velocity
-        elif self.fused_position is not None:
-            self._last_fused_position = self.fused_position.copy()
+        if self.kf.is_initialized():
+            return self.kf.v.reshape(-1).tolist()
         return None
         
     def get_imu_data(self):
@@ -112,13 +104,13 @@ class SensorFusion:
         
     def get_kalman_metrics(self):
         """Get current Kalman filter metrics."""
-        if self.kf:
+        if self.kf and self.kf.is_initialized():
             metrics = {
-                'covariance': self.kf.P,
-                'kalman_gain': self.kf.K if self.kf.K is not None else np.zeros((6, 3))
+                'covariance': self.kf.p_cov,
+                'position': self.kf.p.reshape(-1).tolist(),
+                'velocity': self.kf.v.reshape(-1).tolist(),
+                'orientation': self.kf.q.reshape(-1).tolist()
             }
-            if self.kf.y is not None:
-                metrics['innovation'] = self.kf.y
             return metrics
         return None
         
@@ -197,8 +189,8 @@ def main():
             
             if fused_pos is not None and true_pos is not None:
                 print(f"True Position: {true_pos}")
-                print(f"Fused Position: {fused_pos.flatten()}")
-                print(f"Position Error: {np.linalg.norm(fused_pos.flatten() - true_pos)}")
+                print(f"Fused Position: {fused_pos}")
+                print(f"Position Error: {np.linalg.norm(np.array(fused_pos) - true_pos)}")
                 print("-" * 50)
                 
             time.sleep(0.1)
