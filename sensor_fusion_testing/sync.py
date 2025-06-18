@@ -130,7 +130,7 @@ class IMUIntegrator:
         }
 
 class VehicleMonitor:
-    def __init__(self, width=1200, height=800):
+    def __init__(self, width=800, height=600):
         pygame.init()
         self.display = pygame.display.set_mode((width, height), RESIZABLE)
         pygame.display.set_caption("Vehicle Position Monitor")
@@ -138,7 +138,7 @@ class VehicleMonitor:
         
         # Connect to CARLA
         self.client = carla.Client('localhost', 2000)
-        self.client.set_timeout(10.0)
+        self.client.set_timeout(20.0)
         self.world = self.client.get_world()
         
         # Find our vehicle

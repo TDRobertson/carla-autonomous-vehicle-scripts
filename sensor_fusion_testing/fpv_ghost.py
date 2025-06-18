@@ -23,14 +23,14 @@ if carla_path not in sys.path:
 import carla
 
 
-def setup_dual_view(initial_width=800, initial_height=1200):
+def setup_dual_view(initial_width=800, initial_height=600):
     pygame.init()
     
     display = pygame.display.set_mode((initial_width, initial_height), RESIZABLE)
     pygame.display.set_caption("Vehicle Views (Resizable)")
     
     client = carla.Client('localhost', 2000)
-    client.set_timeout(10.0)
+    client.set_timeout(20.0)
     world = client.get_world()
     
     vehicle = None
