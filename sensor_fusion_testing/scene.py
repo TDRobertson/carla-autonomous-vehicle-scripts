@@ -69,13 +69,18 @@ try:
 except IndexError:
     pass
 
+# Ensure the CARLA Python API path is correctly added
+carla_path = 'C:/CARLA_0.9.15/PythonAPI/carla'
+if carla_path not in sys.path:
+    sys.path.append(carla_path)
+
 import carla
 
 
 def setup_carla_scene():
     # Connect to client
     client = carla.Client('localhost', 2000)
-    client.set_timeout(10.0)
+    client.set_timeout(20.0)
     world = client.get_world()
     print(client.get_available_maps())
     print(client.get_server_version())

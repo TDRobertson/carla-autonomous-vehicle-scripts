@@ -17,6 +17,11 @@ try:
 except IndexError:
     pass
 
+# Ensure the CARLA Python API path is correctly added
+carla_path = 'C:/CARLA_0.9.15/PythonAPI/carla'
+if carla_path not in sys.path:
+    sys.path.append(carla_path)
+
 import carla
 
 class IMUIntegrator:

@@ -1,6 +1,9 @@
 import time
 import pygame
 import numpy as np
+import sys
+import glob
+import os
 from pygame.locals import RESIZABLE, VIDEORESIZE
 
 # Add the CARLA Python API to PYTHONPATH
@@ -11,6 +14,11 @@ try:
         'win-amd64' if os.name == 'nt' else 'linux-x86_64'))[0])
 except IndexError:
     pass
+
+# Ensure the CARLA Python API path is correctly added
+carla_path = 'C:/CARLA_0.9.15/PythonAPI/carla'
+if carla_path not in sys.path:
+    sys.path.append(carla_path)
 
 import carla
 
