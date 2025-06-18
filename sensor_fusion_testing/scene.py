@@ -53,10 +53,24 @@
 #         if 'vehicle' in locals():
 #             vehicle.destroy()
 
-import carla
 import time
 import math
 import random
+import sys
+import glob
+import os
+
+# Add the CARLA Python API to PYTHONPATH
+try:
+    sys.path.append(glob.glob('../carla/dist/carla-*%d.%d-%s.egg' % (
+        sys.version_info.major,
+        sys.version_info.minor,
+        'win-amd64' if os.name == 'nt' else 'linux-x86_64'))[0])
+except IndexError:
+    pass
+
+import carla
+
 
 def setup_carla_scene():
     # Connect to client

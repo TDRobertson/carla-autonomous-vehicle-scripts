@@ -1,8 +1,19 @@
-import carla
 import time
 import pygame
 import numpy as np
 from pygame.locals import RESIZABLE, VIDEORESIZE
+
+# Add the CARLA Python API to PYTHONPATH
+try:
+    sys.path.append(glob.glob('../carla/dist/carla-*%d.%d-%s.egg' % (
+        sys.version_info.major,
+        sys.version_info.minor,
+        'win-amd64' if os.name == 'nt' else 'linux-x86_64'))[0])
+except IndexError:
+    pass
+
+import carla
+
 
 def setup_dual_view(initial_width=800, initial_height=1200):
     pygame.init()

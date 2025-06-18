@@ -1,8 +1,21 @@
-import carla
 import numpy as np
 import time
+import sys
+import glob
+import os
 from kalman_filter import KalmanFilter
 from gps_spoofer import GPSSpoofer, SpoofingStrategy
+
+# Add the CARLA Python API to PYTHONPATH
+try:
+    sys.path.append(glob.glob('../../carla/dist/carla-*%d.%d-%s.egg' % (
+        sys.version_info.major,
+        sys.version_info.minor,
+        'win-amd64' if os.name == 'nt' else 'linux-x86_64'))[0])
+except IndexError:
+    pass
+
+import carla
 
 class SensorFusion:
     def __init__(self, vehicle, enable_spoofing=False, spoofing_strategy=SpoofingStrategy.GRADUAL_DRIFT):

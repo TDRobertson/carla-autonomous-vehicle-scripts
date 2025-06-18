@@ -1,10 +1,23 @@
-import carla
 import pygame
 import numpy as np
 import math
 import time
+import sys
+import glob
+import os
 from pygame.locals import RESIZABLE, VIDEORESIZE
 from scipy.spatial.transform import Rotation
+
+# Add the CARLA Python API to PYTHONPATH
+try:
+    sys.path.append(glob.glob('../carla/dist/carla-*%d.%d-%s.egg' % (
+        sys.version_info.major,
+        sys.version_info.minor,
+        'win-amd64' if os.name == 'nt' else 'linux-x86_64'))[0])
+except IndexError:
+    pass
+
+import carla
 
 class IMUIntegrator:
     def __init__(self):

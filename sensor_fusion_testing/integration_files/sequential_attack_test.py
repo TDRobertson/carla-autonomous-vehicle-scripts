@@ -1,13 +1,26 @@
-import carla
 import numpy as np
 import time
 import json
 import os
+import sys
+import glob
 from typing import List, Tuple, Dict, Optional
 from dataclasses import dataclass
 from gps_spoofer import GPSSpoofer, SpoofingStrategy
 from sensor_fusion import SensorFusion
 from visualization import DataVisualizer
+
+# Add the CARLA Python API to PYTHONPATH
+try:
+    sys.path.append(glob.glob('../../carla/dist/carla-*%d.%d-%s.egg' % (
+        sys.version_info.major,
+        sys.version_info.minor,
+        'win-amd64' if os.name == 'nt' else 'linux-x86_64'))[0])
+except IndexError:
+    pass
+
+import carla
+
 
 @dataclass
 class AttackSequence:
