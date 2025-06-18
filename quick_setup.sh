@@ -1,44 +1,20 @@
 #!/bin/bash
-# Quick setup script for CARLA environment on WSL/Linux
+# Strict Python 3.10 quick setup for CARLA environment on Linux/WSL
+set -e
 
-set -e  # Exit on any error
+echo "CARLA Environment Quick Setup (Strict Python 3.10)"
 
-echo "CARLA Environment Quick Setup"
-echo "============================="
-
-# Check if we're on a supported system
-if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    echo "✓ Linux system detected"
-elif [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "cygwin" ]]; then
-    echo "✓ WSL system detected"
-else
-    echo "⚠ Unsupported system: $OSTYPE"
-    echo "This script is designed for Linux/WSL systems"
-    exit 1
-fi
-
-# Check Python version
-echo "Checking Python version..."
+# Check for python3.10
 if command -v python3.10 &> /dev/null; then
-    echo "✓ Python 3.10 found"
+    echo "✓ python3.10 found"
     PYTHON_CMD="python3.10"
-elif command -v python3 &> /dev/null; then
-    PYTHON_VERSION=$(python3 --version 2>&1 | grep -oP '\d+\.\d+' | head -1)
-    if [[ "$PYTHON_VERSION" == "3.10" ]]; then
-        echo "✓ Python 3.10 found"
-        PYTHON_CMD="python3"
-    else
-        echo "✗ Python 3.10 not found. Found version: $PYTHON_VERSION"
-        echo "Please install Python 3.10 first"
-        exit 1
-    fi
 else
-    echo "✗ Python 3 not found"
-    echo "Please install Python 3.10 first"
+    echo "ERROR: python3.10 was not found on your system."
+    echo "Please install Python 3.10.11 or 3.10.14 and ensure it is in your PATH."
     exit 1
 fi
 
-# Check if virtual environment already exists
+# Remove old venv if exists
 if [ -d "venv" ]; then
     echo "Virtual environment already exists."
     read -p "Do you want to recreate it? (y/N): " -n 1 -r
@@ -52,36 +28,18 @@ if [ -d "venv" ]; then
     fi
 fi
 
-# Create virtual environment
-echo "Creating virtual environment..."
+# Create venv with python3.10
 $PYTHON_CMD -m venv venv
 
-# Activate virtual environment
-echo "Activating virtual environment..."
+# Activate and install requirements
 source venv/bin/activate
-
-# Upgrade pip
-echo "Upgrading pip..."
 pip install --upgrade pip
-
-# Install requirements
-echo "Installing requirements..."
 pip install -r requirements.txt
 
 echo ""
 echo "============================="
 echo "Setup completed successfully!"
-echo ""
-echo "To activate the environment:"
-echo "  source venv/bin/activate"
-echo ""
-echo "To deactivate:"
-echo "  deactivate"
-echo ""
-echo "To test the environment:"
-echo "  python test_environment.py"
-echo ""
-echo "To run your CARLA scripts:"
-echo "  1. Activate the environment"
-echo "  2. Navigate to your script directory"
-echo "  3. Run: python your_script.py" 
+echo "To activate: source venv/bin/activate"
+echo "To deactivate: deactivate"
+echo "To test: python test_environment.py"
+echo "To run: python your_script.py" 
