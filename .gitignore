@@ -8,3 +8,4 @@ real-time-carla-kalman-filter/*
 .cursor/*
 .env
 venv/
+sensor_fusion_testing/environment.yml
