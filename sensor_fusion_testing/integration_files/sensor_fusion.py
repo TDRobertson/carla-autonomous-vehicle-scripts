@@ -3,7 +3,7 @@ import time
 import sys
 import glob
 import os
-from kalman_filter import KalmanFilter
+from advanced_kalman_filter import AdvancedKalmanFilter
 from gps_spoofer import GPSSpoofer, SpoofingStrategy
 
 # Add the CARLA Python API to PYTHONPATH
@@ -20,7 +20,7 @@ import carla
 class SensorFusion:
     def __init__(self, vehicle, enable_spoofing=False, spoofing_strategy=SpoofingStrategy.GRADUAL_DRIFT):
         self.vehicle = vehicle
-        self.kf = KalmanFilter()
+        self.kf = AdvancedKalmanFilter()
         self.enable_spoofing = enable_spoofing
         
         # Initialize spoofer first
@@ -36,6 +36,7 @@ class SensorFusion:
         self.imu_data = None
         self.fused_position = None
         self.true_position = None
+        self.last_imu_timestamp = None
         
     def setup_sensors(self):
         # Setup GPS
@@ -63,38 +64,25 @@ class SensorFusion:
             data.transform.location.y,
             data.transform.location.z
         ])
-        
         # Apply spoofing if enabled
         if self.enable_spoofing and self.spoofer is not None:
             self.gps_data = self.spoofer.spoof_position(self.true_position)
         else:
             self.gps_data = self.true_position
-            
-        self.update()
+        # Update Kalman filter with GPS measurement
+        if self.gps_data is not None:
+            self.kf.update_with_gps(self.gps_data)
+            self.fused_position = self.kf.position.copy()
         
     def imu_callback(self, data):
-        self.imu_data = {
-            'acceleration': np.array([
-                data.accelerometer.x,
-                data.accelerometer.y,
-                data.accelerometer.z
-            ]),
-            'gyroscope': np.array([
-                data.gyroscope.x,
-                data.gyroscope.y,
-                data.gyroscope.z
-            ])
-        }
+        # Use CARLA's simulation time for timestamp
+        timestamp = self.vehicle.get_world().get_snapshot().timestamp.elapsed_seconds
+        self.imu_data = data
+        self.last_imu_timestamp = timestamp
+        # Predict step with IMU data
+        self.kf.predict(data, timestamp)
+        self.fused_position = self.kf.position.copy()
         
-    def update(self):
-        """Update the sensor fusion state."""
-        if self.gps_data is not None:
-            # Predict step
-            predicted_position = self.kf.predict()
-            
-            # Update step with GPS measurement
-            self.fused_position = self.kf.update(self.gps_data)
-            
     def get_fused_position(self):
         return self.fused_position
         
@@ -126,13 +114,12 @@ class SensorFusion:
     def get_kalman_metrics(self):
         """Get current Kalman filter metrics."""
         if self.kf:
-            metrics = {
+            return {
                 'covariance': self.kf.P,
-                'kalman_gain': self.kf.K if self.kf.K is not None else np.zeros((6, 3))
+                'position': self.kf.position,
+                'velocity': self.kf.velocity,
+                'orientation': self.kf.orientation
             }
-            if self.kf.y is not None:
-                metrics['innovation'] = self.kf.y
-            return metrics
         return None
         
     def toggle_spoofing(self, enable=None):
@@ -140,11 +127,11 @@ class SensorFusion:
             self.enable_spoofing = enable
         else:
             self.enable_spoofing = not self.enable_spoofing
-            
+        
     def set_spoofing_strategy(self, strategy):
         if self.enable_spoofing:
             self.spoofer.set_strategy(strategy)
-            
+        
     def cleanup(self):
         if self.gps_sensor:
             self.gps_sensor.destroy()

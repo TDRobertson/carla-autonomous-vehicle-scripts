@@ -12,6 +12,10 @@ The sensor fusion testing framework is designed to:
 - Analyze the effectiveness of spoofing detection algorithms
 - Generate datasets for machine learning-based attack detection
 
+## Analysis and Results
+
+See [../analysis.md](../analysis.md) for a detailed summary of the research goals, file integrations, test methodology, results, and interpretation. This document includes a comprehensive analysis of all spoofing attacks tested and is suitable for presentation.
+
 ## File Structure
 
 ### Core Testing Files
@@ -156,7 +160,20 @@ The sensor fusion testing framework is designed to:
 
 ## Usage Examples
 
-### Basic Sensor Fusion Testing
+### Complete Pipeline Testing
+
+```bash
+# From project root, launch all visualizations and scene setup
+python run_all.py
+
+# In a separate terminal, run the attack testing
+python sensor_fusion_testing/integration_files/sequential_attack_test.py
+
+# For post-run analysis
+python sensor_fusion_testing/integration_files/data_processor.py
+```
+
+### Individual Component Testing
 
 ```bash
 # Run the main sensor fusion visualization
@@ -167,6 +184,9 @@ python scene.py
 
 # View dual camera feeds
 python fpv_ghost.py
+
+# Test sensor fusion with spoofing
+python integration_files/sensor_fusion.py
 ```
 
 ### Advanced Attack Testing
@@ -177,16 +197,6 @@ python integration_files/sequential_attack_test.py
 
 # Process test results for ML
 python integration_files/data_processor.py
-```
-
-### Individual Component Testing
-
-```bash
-# Test sensor fusion with spoofing
-python integration_files/sensor_fusion.py
-
-# Test spoofing detection
-# (Use within other scripts)
 ```
 
 ## Dependencies
