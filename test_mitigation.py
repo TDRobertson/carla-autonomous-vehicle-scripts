@@ -1,22 +1,8 @@
 #!/usr/bin/env python3
 """
-Test script for Innovation-Based GPS Spoofing Mitigation System
+Simple test script for Innovation-Based GPS Spoofing Mitigation System
 
-This script demonstrates the new innovation-based mitigation system that:
-1. Monitors innovation values (difference between GPS and IMU predictions)
-2. Detects suspicious GPS data when innovation exceeds 5 meters
-3. Falls back to IMU predictions when GPS is consistently suspicious
-4. Tracks GPS acceptance/rejection rates
-5. Monitors constant bias between GPS and IMU
-
-Usage:
-    python test_innovation_mitigation.py [attack_type]
-
-Attack types:
-    - gradual_drift: Subtle drift with random fluctuations
-    - sudden_jump: Innovation-aware sudden jumps
-    - random_walk: Directional random walk
-    - replay: Sophisticated replay with noise
+This script can be run from the project root directory to test the mitigation system.
 """
 
 import sys
@@ -24,9 +10,10 @@ import os
 import time
 import numpy as np
 
-# Add the current directory to Python path for imports
+# Add the sensor_fusion_testing directory to Python path
 current_dir = os.path.dirname(os.path.abspath(__file__))
-integration_dir = os.path.join(current_dir, 'integration_files')
+sensor_fusion_dir = os.path.join(current_dir, 'sensor_fusion_testing')
+integration_dir = os.path.join(sensor_fusion_dir, 'integration_files')
 sys.path.insert(0, integration_dir)
 
 from sensor_fusion import SensorFusion, find_spawn_point, setup_spectator
@@ -135,9 +122,9 @@ def test_innovation_mitigation(attack_type="sudden_jump"):
                         
                         # Highlight when mitigation is working
                         if gps_stats['rejected_count'] > 0:
-                            print("MITIGATION ACTIVE: GPS data being rejected!")
+                            print("🛡️  MITIGATION ACTIVE: GPS data being rejected!")
                         if acceptance_rate < 0.5:
-                            print("HIGH REJECTION RATE: Attack may be detected!")
+                            print("⚠️  HIGH REJECTION RATE: Attack may be detected!")
                 
                 time.sleep(0.1)  # 10Hz update rate
         

@@ -74,6 +74,11 @@ class SensorFusion:
             self.gps_data = self.true_position
         # Update Kalman filter with GPS measurement and IMU prediction for bias detection
         if self.gps_data is not None:
+            # Safety check: ensure imu_predicted_position exists
+            if self.imu_predicted_position is None:
+                # If no IMU prediction yet, use current GPS as fallback
+                self.imu_predicted_position = self.gps_data.copy()
+            
             gps_accepted = self.kf.update_with_gps(self.gps_data, self.imu_predicted_position)
             if gps_accepted:
                 self.gps_accepted_count += 1
