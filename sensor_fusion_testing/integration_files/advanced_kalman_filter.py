@@ -8,14 +8,14 @@ class AdvancedKalmanFilter:
         self.velocity = np.zeros(3)
         self.orientation = np.array([0, 0, 0, 1])  # quaternion [x,y,z,w]
         
-        # Covariance matrix
-        self.P = np.eye(9) * 0.1
+        # Covariance matrix - start with reasonable values
+        self.P = np.eye(9) * 1.0  # Increased from 0.1 to 1.0 for better stability
         
-        # Process noise
-        self.Q = np.eye(9) * 0.01
+        # Process noise - reasonable values for vehicle dynamics
+        self.Q = np.eye(9) * 0.1  # Increased from 0.01 to 0.1
         
-        # Measurement noise
-        self.R = np.eye(3) * 0.1
+        # Measurement noise - GPS typically has ~1-3m accuracy
+        self.R = np.eye(3) * 2.0  # Increased from 0.1 to 2.0 for realistic GPS noise
         
         # Last timestamp
         self.last_timestamp = None
@@ -34,6 +34,9 @@ class AdvancedKalmanFilter:
         self.gps_imu_bias_history = []
         self.max_bias_history = 20
         self.bias_threshold = 2.0  # meters - threshold for constant bias detection
+        
+        # Flag to track if filter has been properly initialized
+        self.initialized = False
 
     def predict(self, imu_data, timestamp):
         if self.last_timestamp is None:
@@ -74,17 +77,47 @@ class AdvancedKalmanFilter:
 
     def update_with_gps(self, gps_pos, imu_predicted_pos=None):
         """Correct state using GPS measurement with innovation-based spoofing detection"""
+        # Initialize filter with first GPS measurement if not done yet
+        if not self.initialized:
+            print(f"Initializing Kalman filter with GPS position: {gps_pos}")
+            self.position = gps_pos.copy()
+            self.initialized = True
+            return True
+        
         # Measurement matrix (we only observe position)
         H = np.zeros((3, 9))
         H[:3, :3] = np.eye(3)
         
-        # Kalman gain
-        S = H @ self.P @ H.T + self.R
-        K = self.P @ H.T @ np.linalg.inv(S)
-        
         # Innovation
         innovation = gps_pos - self.position
         innovation_magnitude = np.linalg.norm(innovation)
+        
+        # Debug: Check for NaN or inf values
+        if np.any(np.isnan(innovation)) or np.any(np.isinf(innovation)):
+            print(f"ERROR: Invalid innovation values detected: {innovation}")
+            return False
+        
+        # Debug: Check for extremely large values
+        if innovation_magnitude > 1000:  # More than 1km is definitely wrong
+            print(f"ERROR: Extremely large innovation detected: {innovation_magnitude:.2f}m")
+            print(f"GPS position: {gps_pos}")
+            print(f"KF position: {self.position}")
+            print(f"Innovation vector: {innovation}")
+            return False
+        
+        # Kalman gain calculation with stability checks
+        S = H @ self.P @ H.T + self.R
+        
+        # Check if S is well-conditioned
+        if np.linalg.cond(S) > 1e12:  # Very ill-conditioned
+            print(f"WARNING: Ill-conditioned innovation covariance matrix: {np.linalg.cond(S)}")
+            return False
+        
+        try:
+            K = self.P @ H.T @ np.linalg.inv(S)
+        except np.linalg.LinAlgError:
+            print("ERROR: Failed to invert innovation covariance matrix")
+            return False
         
         # Track innovation history
         self.innovation_history.append(innovation_magnitude)
@@ -114,6 +147,12 @@ class AdvancedKalmanFilter:
         
         # Normal Kalman update
         state_update = K @ innovation
+        
+        # Check for invalid state updates
+        if np.any(np.isnan(state_update)) or np.any(np.isinf(state_update)):
+            print(f"ERROR: Invalid state update detected: {state_update}")
+            return False
+        
         self.position += state_update[:3]
         self.velocity += state_update[3:6]
         
