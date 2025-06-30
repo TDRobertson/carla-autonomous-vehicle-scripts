@@ -37,6 +37,9 @@ class SensorFusion:
         self.fused_position = None
         self.true_position = None
         self.last_imu_timestamp = None
+        self.imu_predicted_position = None  # Track IMU prediction for bias detection
+        self.gps_rejected_count = 0  # Track how many times GPS was rejected
+        self.gps_accepted_count = 0  # Track how many times GPS was accepted
         
     def setup_sensors(self):
         # Setup GPS
@@ -69,10 +72,20 @@ class SensorFusion:
             self.gps_data = self.spoofer.spoof_position(self.true_position)
         else:
             self.gps_data = self.true_position
-        # Update Kalman filter with GPS measurement
+        # Update Kalman filter with GPS measurement and IMU prediction for bias detection
         if self.gps_data is not None:
-            self.kf.update_with_gps(self.gps_data)
+            gps_accepted = self.kf.update_with_gps(self.gps_data, self.imu_predicted_position)
+            if gps_accepted:
+                self.gps_accepted_count += 1
+            else:
+                self.gps_rejected_count += 1
             self.fused_position = self.kf.position.copy()
+            
+            # Update spoofer with current innovation for adaptive attacks
+            if self.enable_spoofing and self.spoofer is not None:
+                innovation_stats = self.kf.get_innovation_stats()
+                if innovation_stats:
+                    self.spoofer.update_innovation(innovation_stats['current_innovation'])
         
     def imu_callback(self, data):
         # Use CARLA's simulation time for timestamp
@@ -81,6 +94,8 @@ class SensorFusion:
         self.last_imu_timestamp = timestamp
         # Predict step with IMU data
         self.kf.predict(data, timestamp)
+        # Store IMU predicted position for bias detection
+        self.imu_predicted_position = self.kf.position.copy()
         self.fused_position = self.kf.position.copy()
         
     def get_fused_position(self):
@@ -121,6 +136,30 @@ class SensorFusion:
                 'orientation': self.kf.orientation
             }
         return None
+        
+    def get_innovation_stats(self):
+        """Get innovation statistics for spoofing detection monitoring."""
+        return self.kf.get_innovation_stats()
+        
+    def get_bias_stats(self):
+        """Get bias statistics for constant bias detection monitoring."""
+        return self.kf.get_bias_stats()
+        
+    def get_gps_stats(self):
+        """Get GPS acceptance/rejection statistics."""
+        total_gps = self.gps_accepted_count + self.gps_rejected_count
+        if total_gps == 0:
+            return {
+                'accepted_count': 0,
+                'rejected_count': 0,
+                'acceptance_rate': 0.0
+            }
+        
+        return {
+            'accepted_count': self.gps_accepted_count,
+            'rejected_count': self.gps_rejected_count,
+            'acceptance_rate': self.gps_accepted_count / total_gps
+        }
         
     def toggle_spoofing(self, enable=None):
         if enable is not None:
@@ -181,13 +220,19 @@ def main():
     # Enable autopilot
     vehicle.set_autopilot(True)
     
-    # Initialize sensor fusion with spoofing enabled
+    # Initialize sensor fusion with spoofing enabled and innovation-based mitigation
     # Change the strategy here to test different methods:
-    # SpoofingStrategy.GRADUAL_DRIFT --
-    # SpoofingStrategy.SUDDEN_JUMP
-    # SpoofingStrategy.RANDOM_WALK
-    # SpoofingStrategy.REPLAY
-    fusion = SensorFusion(vehicle, enable_spoofing=True, spoofing_strategy=SpoofingStrategy.REPLAY)
+    # SpoofingStrategy.GRADUAL_DRIFT -- More subtle with random fluctuations
+    # SpoofingStrategy.SUDDEN_JUMP -- Innovation-aware jumping
+    # SpoofingStrategy.RANDOM_WALK -- Directional random walk
+    # SpoofingStrategy.REPLAY -- Sophisticated replay with noise
+    fusion = SensorFusion(vehicle, enable_spoofing=True, spoofing_strategy=SpoofingStrategy.SUDDEN_JUMP)
+    
+    print("=== Innovation-Based GPS Spoofing Mitigation System ===")
+    print("Monitoring innovation values and GPS acceptance/rejection...")
+    print("Innovation threshold: 5.0 meters")
+    print("Suspicious GPS count threshold: 3")
+    print("=" * 60)
     
     try:
         while True:
@@ -196,15 +241,44 @@ def main():
             true_pos = fusion.get_true_position()
             
             if fused_pos is not None and true_pos is not None:
-                print(f"True Position: {true_pos}")
-                print(f"Fused Position: {fused_pos.flatten()}")
-                print(f"Position Error: {np.linalg.norm(fused_pos.flatten() - true_pos)}")
-                print("-" * 50)
+                # Calculate position error
+                position_error = np.linalg.norm(fused_pos - true_pos)
                 
-            time.sleep(0.1)
+                # Get monitoring statistics
+                innovation_stats = fusion.get_innovation_stats()
+                bias_stats = fusion.get_bias_stats()
+                gps_stats = fusion.get_gps_stats()
+                
+                # Display basic position information
+                print(f"\nTrue Position: {true_pos}")
+                print(f"Fused Position: {fused_pos}")
+                print(f"Position Error: {position_error:.3f}m")
+                
+                # Display innovation monitoring
+                if innovation_stats:
+                    print(f"Current Innovation: {innovation_stats['current_innovation']:.3f}m")
+                    print(f"Mean Innovation: {innovation_stats['mean_innovation']:.3f}m")
+                    print(f"Max Innovation: {innovation_stats['max_innovation']:.3f}m")
+                    print(f"Suspicious GPS Count: {innovation_stats['suspicious_count']}")
+                
+                # Display bias monitoring
+                if bias_stats:
+                    print(f"GPS-IMU Bias: {bias_stats['current_bias']:.3f}m")
+                    print(f"Mean Bias: {bias_stats['mean_bias']:.3f}m")
+                    print(f"Bias Std: {bias_stats['bias_std']:.3f}m")
+                
+                # Display GPS acceptance statistics
+                if gps_stats:
+                    print(f"GPS Accepted: {gps_stats['accepted_count']}")
+                    print(f"GPS Rejected: {gps_stats['rejected_count']}")
+                    print(f"GPS Acceptance Rate: {gps_stats['acceptance_rate']:.2%}")
+                
+                print("-" * 60)
+                
+            time.sleep(1.0)  # Update every second for readability
             
     except KeyboardInterrupt:
-        print("Cleaning up...")
+        print("\nCleaning up...")
         fusion.cleanup()
         vehicle.destroy()
 

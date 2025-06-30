@@ -24,6 +24,9 @@ if carla_path not in sys.path:
 
 import carla
 
+# Import the enhanced Kalman filter
+from integration_files.advanced_kalman_filter import AdvancedKalmanFilter
+
 class IMUIntegrator:
     def __init__(self):
         # State vector: [position, velocity, orientation]
@@ -133,7 +136,7 @@ class VehicleMonitor:
     def __init__(self, width=800, height=600):
         pygame.init()
         self.display = pygame.display.set_mode((width, height), RESIZABLE)
-        pygame.display.set_caption("Vehicle Position Monitor")
+        pygame.display.set_caption("Vehicle Position Monitor - Innovation-Based Mitigation")
         self.font = pygame.font.Font(None, 36)
         
         # Connect to CARLA
@@ -165,8 +168,8 @@ class VehicleMonitor:
         self.gps_positions = []
         self.imu_positions = []
         
-        # Initialize IMU integrator
-        self.imu_integrator = IMUIntegrator()
+        # Initialize enhanced Kalman filter with innovation-based mitigation
+        self.kf = AdvancedKalmanFilter()
         
         # Store initial state
         self.initial_position = self.vehicle.get_location()
@@ -187,8 +190,8 @@ class VehicleMonitor:
             initial_alt
         ])
         
-        # Set IMU integrator initial position
-        self.imu_integrator.position = initial_gps_pos
+        # Set Kalman filter initial position
+        self.kf.position = initial_gps_pos
         
         # Set initial orientation from vehicle transform
         initial_transform = self.vehicle.get_transform()
@@ -197,12 +200,12 @@ class VehicleMonitor:
         yaw = math.radians(initial_transform.rotation.yaw)
         
         # Convert Euler angles to quaternion for initial orientation
-        self.imu_integrator.orientation = Rotation.from_euler('xyz', [roll, pitch, yaw]).as_quat()
+        self.kf.orientation = Rotation.from_euler('xyz', [roll, pitch, yaw]).as_quat()
         
         # Set initial velocity if available
         initial_velocity = self.vehicle.get_velocity()
         if initial_velocity:
-            self.imu_integrator.velocity = np.array([
+            self.kf.velocity = np.array([
                 initial_velocity.x,
                 initial_velocity.y,
                 initial_velocity.z
@@ -212,6 +215,8 @@ class VehicleMonitor:
         self.WHITE = (255, 255, 255)
         self.GREEN = (0, 255, 0)
         self.BLUE = (0, 0, 255)
+        self.RED = (255, 0, 0)  # For mitigation warnings
+        self.YELLOW = (255, 255, 0)  # For suspicious GPS
         
     def setup_sensors(self):
         # GPS setup
@@ -264,16 +269,19 @@ class VehicleMonitor:
             )
             self.gps_positions.append(gps_pos)
         
-        # IMU integration
+        # IMU integration with enhanced Kalman filter
         if self.last_imu:
             current_time = self.world.get_snapshot().timestamp.elapsed_seconds
-            self.imu_integrator.predict(self.last_imu, current_time)
+            self.kf.predict(self.last_imu, current_time)
             
-            if self.last_gps:  # Use GPS for corrections
+            # Store IMU predicted position for bias detection
+            imu_predicted_pos = self.kf.position.copy()
+            
+            if self.last_gps:  # Use GPS for corrections with innovation-based mitigation
                 gps_pos = np.array(gps_pos)
-                self.imu_integrator.update_with_gps(gps_pos)
+                gps_accepted = self.kf.update_with_gps(gps_pos, imu_predicted_pos)
                 
-            state = self.imu_integrator.get_state()
+            state = self.kf.get_state()
             self.imu_positions.append(tuple(state['position']))
     
     def draw_text(self, text, pos, color):
@@ -347,6 +355,43 @@ class VehicleMonitor:
             self.draw_text(f"IMU Error: {imu_error:.2f} meters", 
                         (10, 290), self.BLUE)
 
+        # Draw innovation-based mitigation information
+        if hasattr(self.kf, 'get_innovation_stats'):
+            innovation_stats = self.kf.get_innovation_stats()
+            if innovation_stats:
+                current_innovation = innovation_stats['current_innovation']
+                suspicious_count = innovation_stats['suspicious_count']
+                
+                # Color code based on innovation magnitude
+                innovation_color = self.GREEN
+                if current_innovation > 3.0:
+                    innovation_color = self.YELLOW
+                if current_innovation > 5.0:
+                    innovation_color = self.RED
+                
+                self.draw_text(f"Innovation: {current_innovation:.2f}m", 
+                            (10, 330), innovation_color)
+                self.draw_text(f"Suspicious GPS: {suspicious_count}", 
+                            (10, 370), self.RED if suspicious_count > 0 else self.GREEN)
+        
+        # Draw bias information
+        if hasattr(self.kf, 'get_bias_stats'):
+            bias_stats = self.kf.get_bias_stats()
+            if bias_stats:
+                current_bias = bias_stats['current_bias']
+                bias_std = bias_stats['bias_std']
+                
+                bias_color = self.GREEN
+                if current_bias > 1.0:
+                    bias_color = self.YELLOW
+                if current_bias > 2.0:
+                    bias_color = self.RED
+                
+                self.draw_text(f"GPS-IMU Bias: {current_bias:.2f}m", 
+                            (10, 410), bias_color)
+                self.draw_text(f"Bias Std: {bias_std:.2f}m", 
+                            (10, 450), self.WHITE)
+        
         # Draw trajectories
         def plot_trajectory(positions, color):
             if len(positions) < 2:

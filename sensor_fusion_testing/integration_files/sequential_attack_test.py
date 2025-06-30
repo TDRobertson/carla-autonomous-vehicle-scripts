@@ -84,7 +84,16 @@ class SequentialAttackTester:
             'update_frequency': [],
             'position_error_rate': [],
             'velocity_error_rate': [],
-            'acceleration_error_rate': []
+            'acceleration_error_rate': [],
+            # innovation-based mitigation data
+            'innovation_magnitudes': [],
+            'gps_accepted': [],
+            'gps_rejected': [],
+            'suspicious_gps_count': [],
+            'gps_imu_bias': [],
+            'bias_std': [],
+            'mitigation_triggered': [],
+            'fallback_to_imu': []
         }
         
     def add_attack_sequence(self, strategy: SpoofingStrategy, duration: float, description: str):
@@ -127,6 +136,12 @@ class SequentialAttackTester:
         fused_velocity = self.sensor_fusion.get_fused_velocity()
         imu_data = self.sensor_fusion.get_imu_data()
         kalman_metrics = self.sensor_fusion.get_kalman_metrics()
+        
+        # Get innovation-based mitigation data
+        innovation_stats = self.sensor_fusion.get_innovation_stats()
+        bias_stats = self.sensor_fusion.get_bias_stats()
+        gps_stats = self.sensor_fusion.get_gps_stats()
+        
         if true_position is None or fused_position is None:
             return
         position_error = np.linalg.norm(true_position - fused_position)
@@ -141,7 +156,16 @@ class SequentialAttackTester:
                 'kalman_metrics': [],
                 'position_errors': [],
                 'velocity_errors': [],
-                'timestamps': []
+                'timestamps': [],
+                # New innovation-based mitigation data
+                'innovation_magnitudes': [],
+                'gps_accepted': [],
+                'gps_rejected': [],
+                'suspicious_gps_count': [],
+                'gps_imu_bias': [],
+                'bias_std': [],
+                'mitigation_triggered': [],
+                'fallback_to_imu': []
             }
         self.results[current_attack.strategy]['true_positions'].append(true_position)
         self.results[current_attack.strategy]['fused_positions'].append(fused_position)
@@ -156,6 +180,36 @@ class SequentialAttackTester:
         self.results[current_attack.strategy]['position_errors'].append(position_error)
         self.results[current_attack.strategy]['velocity_errors'].append(velocity_error)
         self.results[current_attack.strategy]['timestamps'].append(timestamp)
+        
+        # Store innovation-based mitigation data
+        if innovation_stats:
+            self.results[current_attack.strategy]['innovation_magnitudes'].append(innovation_stats['current_innovation'])
+            self.results[current_attack.strategy]['suspicious_gps_count'].append(innovation_stats['suspicious_count'])
+        else:
+            self.results[current_attack.strategy]['innovation_magnitudes'].append(0.0)
+            self.results[current_attack.strategy]['suspicious_gps_count'].append(0)
+            
+        if bias_stats:
+            self.results[current_attack.strategy]['gps_imu_bias'].append(bias_stats['current_bias'])
+            self.results[current_attack.strategy]['bias_std'].append(bias_stats['bias_std'])
+        else:
+            self.results[current_attack.strategy]['gps_imu_bias'].append(0.0)
+            self.results[current_attack.strategy]['bias_std'].append(0.0)
+            
+        if gps_stats:
+            self.results[current_attack.strategy]['gps_accepted'].append(gps_stats['accepted_count'])
+            self.results[current_attack.strategy]['gps_rejected'].append(gps_stats['rejected_count'])
+            # Track if mitigation was triggered (GPS rejection rate > 50%)
+            mitigation_triggered = gps_stats['acceptance_rate'] < 0.5 if gps_stats['accepted_count'] + gps_stats['rejected_count'] > 0 else False
+            self.results[current_attack.strategy]['mitigation_triggered'].append(mitigation_triggered)
+            # Track fallback to IMU (when GPS is rejected)
+            fallback_to_imu = gps_stats['rejected_count'] > 0
+            self.results[current_attack.strategy]['fallback_to_imu'].append(fallback_to_imu)
+        else:
+            self.results[current_attack.strategy]['gps_accepted'].append(0)
+            self.results[current_attack.strategy]['gps_rejected'].append(0)
+            self.results[current_attack.strategy]['mitigation_triggered'].append(False)
+            self.results[current_attack.strategy]['fallback_to_imu'].append(False)
         # No static plotting or DataVisualizer calls
     
     def get_current_attack(self) -> AttackSequence:
@@ -190,6 +244,34 @@ class SequentialAttackTester:
             print(f"  Std Velocity Error: {np.std(vels):.3f}")
             print(f"  Max Velocity Error: {np.max(vels):.3f}")
             print(f"  Min Velocity Error: {np.min(vels):.3f}")
+            
+            # Innovation-based mitigation analysis
+            if 'innovation_magnitudes' in data and data['innovation_magnitudes']:
+                innovations = np.array(data['innovation_magnitudes'])
+                print(f"  Mean Innovation: {np.mean(innovations):.3f}")
+                print(f"  Max Innovation: {np.max(innovations):.3f}")
+                print(f"  Innovation > 5m: {np.sum(innovations > 5.0)} times")
+            
+            if 'gps_accepted' in data and data['gps_accepted']:
+                total_gps = data['gps_accepted'][-1] + data['gps_rejected'][-1]
+                if total_gps > 0:
+                    acceptance_rate = data['gps_accepted'][-1] / total_gps
+                    print(f"  GPS Acceptance Rate: {acceptance_rate:.2%}")
+                    print(f"  GPS Rejected: {data['gps_rejected'][-1]} times")
+                    print(f"  GPS Accepted: {data['gps_accepted'][-1]} times")
+            
+            if 'gps_imu_bias' in data and data['gps_imu_bias']:
+                biases = np.array(data['gps_imu_bias'])
+                print(f"  Mean GPS-IMU Bias: {np.mean(biases):.3f}")
+                print(f"  Max GPS-IMU Bias: {np.max(biases):.3f}")
+            
+            if 'mitigation_triggered' in data and data['mitigation_triggered']:
+                mitigation_count = sum(data['mitigation_triggered'])
+                print(f"  Mitigation Triggered: {mitigation_count} times")
+            
+            if 'fallback_to_imu' in data and data['fallback_to_imu']:
+                fallback_count = sum(data['fallback_to_imu'])
+                print(f"  Fallback to IMU: {fallback_count} times")
 
 def main():
     # Do NOT launch visualizations as subprocesses here.
