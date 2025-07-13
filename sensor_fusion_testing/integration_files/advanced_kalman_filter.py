@@ -85,6 +85,9 @@ class AdvancedKalmanFilter:
         
         # Update covariance
         self.P = (np.eye(9) - K @ H) @ self.P
+        
+        # Return innovation magnitude for monitoring
+        return np.linalg.norm(innovation)
 
     def _get_state_transition_matrix(self, dt, R, acc):
         """Calculate the state transition matrix F"""

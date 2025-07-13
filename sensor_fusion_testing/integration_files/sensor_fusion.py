@@ -3,8 +3,8 @@ import time
 import sys
 import glob
 import os
-from advanced_kalman_filter import AdvancedKalmanFilter
-from gps_spoofer import GPSSpoofer, SpoofingStrategy
+from .advanced_kalman_filter import AdvancedKalmanFilter
+from .gps_spoofer import GPSSpoofer, SpoofingStrategy
 
 # Add the CARLA Python API to PYTHONPATH
 try:
@@ -38,6 +38,11 @@ class SensorFusion:
         self.true_position = None
         self.last_imu_timestamp = None
         
+        # Innovation tracking
+        self.current_innovation = None
+        self.innovation_history = []
+        self.max_innovation_history = 100
+        
     def setup_sensors(self):
         # Setup GPS
         gps_bp = self.vehicle.get_world().get_blueprint_library().find('sensor.other.gnss')
@@ -64,14 +69,26 @@ class SensorFusion:
             data.transform.location.y,
             data.transform.location.z
         ])
+        
         # Apply spoofing if enabled
         if self.enable_spoofing and self.spoofer is not None:
-            self.gps_data = self.spoofer.spoof_position(self.true_position)
+            # Pass current innovation to spoofer for innovation-aware attacks
+            innovation = self.current_innovation if self.current_innovation is not None else 0.0
+            self.gps_data = self.spoofer.spoof_position(self.true_position, innovation)
         else:
             self.gps_data = self.true_position
+            
         # Update Kalman filter with GPS measurement
         if self.gps_data is not None:
-            self.kf.update_with_gps(self.gps_data)
+            # Get innovation from Kalman filter update
+            innovation = self.kf.update_with_gps(self.gps_data)
+            self.current_innovation = innovation
+            
+            # Track innovation history
+            self.innovation_history.append(innovation)
+            if len(self.innovation_history) > self.max_innovation_history:
+                self.innovation_history.pop(0)
+                
             self.fused_position = self.kf.position.copy()
         
     def imu_callback(self, data):
@@ -121,6 +138,19 @@ class SensorFusion:
                 'orientation': self.kf.orientation
             }
         return None
+        
+    def get_innovation_stats(self):
+        """Get innovation statistics for monitoring."""
+        if self.spoofer is not None:
+            return self.spoofer.get_innovation_stats()
+        else:
+            return {
+                'current_innovation': self.current_innovation if self.current_innovation is not None else 0.0,
+                'mean_innovation': np.mean(self.innovation_history) if self.innovation_history else 0.0,
+                'max_innovation': np.max(self.innovation_history) if self.innovation_history else 0.0,
+                'suspicious_counter': 0,
+                'is_suspicious': False
+            }
         
     def toggle_spoofing(self, enable=None):
         if enable is not None:

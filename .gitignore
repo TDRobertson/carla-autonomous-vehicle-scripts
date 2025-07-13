@@ -9,3 +9,8 @@ real-time-carla-kalman-filter/*
 .env
 venv/
 sensor_fusion_testing/environment.yml
+__pycache__
+innovation_aware_attack_results_*.json
+sensor_fusion_testing/integration_files/__pycache__/advanced_kalman_filter.cpython-310.pyc
+sensor_fusion_testing/integration_files/__pycache__/gps_spoofer.cpython-310.pyc
+sensor_fusion_testing/integration_files/__pycache__/sensor_fusion.cpython-310.pyc
