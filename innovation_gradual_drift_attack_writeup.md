@@ -229,31 +229,34 @@ def run_innovation_aware_attack_test(attack_config):
 
 **Analysis**: The aggressive approach achieved significant success in compromising the navigation system while maintaining reasonable stealth. The attack demonstrated that sophisticated GPS spoofing can overcome Kalman filter defenses.
 
-## Key Research Findings
+## New 600-Second Simple Attack Results (Original Version)
 
-### 1. Innovation-Based Detection Effectiveness
+**Configuration:**
 
-The innovation-based detection system successfully identified 31% of aggressive attacks (69% stealth rate), demonstrating that:
+- Simple gradual drift attack (as in commit 26e8e3339656bcdfd926b62c6086c759be52cd3e)
+- Test duration: 600 seconds
 
-- Innovation monitoring provides partial protection against GPS spoofing
-- Sophisticated attacks can still bypass innovation-based detection
-- Additional detection mechanisms are required for robust protection
+**Performance:**
 
-### 2. Effectiveness vs Stealth Trade-offs
+- **Mean Position Error:** 15.45 meters
+- **Max Position Error:** 235.68 meters
+- **Mean Innovation:** 0.52 meters
+- **Max Innovation:** 334.12 meters
+- **Attack Success Rate:** 83.9% (time with error > 5m)
+- **Stealth Rate:** 99.5% (time below 5.0m threshold)
 
-The results clearly demonstrate the fundamental trade-off between attack effectiveness and stealth:
+**Analysis:**
+The simple attack, when run for a longer duration (10 minutes), achieved both high effectiveness and high stealth. The mean position error was significantly higher than in previous short runs, and the attack success rate was 83.9%, with the system remaining stealthy 99.5% of the time. This demonstrates that even a simple gradual drift attack can be highly effective over longer periods, and that the Kalman filter's innovation-based detection may not be sufficient for persistent attacks.
 
-- Conservative attacks achieve high stealth (93.8%) but low effectiveness (6.0%)
-- Aggressive attacks achieve high effectiveness (81.7%) but reduced stealth (69.0%)
-- This trade-off validates the need for machine learning-based detection
+---
 
-### 3. Kalman Filter Limitations
+## Updated Key Research Findings
 
-The successful aggressive attack (81.7% success rate) demonstrates that:
+- The 600-second simple attack run shows that attack effectiveness can increase dramatically with longer test durations, even for basic attack strategies.
+- The high stealth rate (99.5%) indicates that the innovation threshold was rarely exceeded, highlighting a limitation of threshold-based detection for slow, persistent attacks.
+- These results reinforce the need for more advanced, possibly machine learning-based, detection mechanisms.
 
-- Kalman filters alone are insufficient for robust spoofing detection
-- Innovation-based detection can be circumvented by sophisticated attacks
-- Additional detection mechanisms are necessary for comprehensive protection
+---
 
 ## Technical Implementation Details
 
@@ -326,6 +329,6 @@ The testing framework and results provide a foundation for:
 
 The innovation-aware gradual drift GPS spoofing attack successfully demonstrated that sophisticated attacks can overcome traditional sensor fusion defenses. The aggressive attack achieved an 81.7% success rate while maintaining 69% stealth, clearly showing that Kalman filters alone are insufficient for robust spoofing detection.
 
-These results provide  evidence for the need to implement additional detection mechanisms, particularly machine learning-based approaches that can identify subtle patterns and anomalies beyond simple threshold-based detection. The technical implementation provides a solid foundation for future research in autonomous vehicle security.
+These results provide evidence for the need to implement additional detection mechanisms, particularly machine learning-based approaches that can identify subtle patterns and anomalies beyond simple threshold-based detection. The technical implementation provides a solid foundation for future research in autonomous vehicle security.
 
 The research framework and testing methodology developed here can be extended to other attack types and detection mechanisms, contributing to the broader field of autonomous vehicle cybersecurity.

@@ -26,16 +26,33 @@ This document compares two versions of the innovation-aware gradual drift attack
 - **Min/Max Drift Rate**: 0.02-0.25 m/s
 - **Aggressive Features**: Exponential growth, directional changes, variable rates
 
-## Results Comparison
+### Version 3 (Simple, 600s) - `innovation_aware_attack_results_1752509320.json`
 
-| Metric                  | Version 1 (Original) | Version 2 (Enhanced) | Improvement |
-| ----------------------- | -------------------- | -------------------- | ----------- |
-| **Mean Position Error** | 6.18 m               | 13.97 m              | **+126%**   |
-| **Max Position Error**  | 251.78 m             | 294.03 m             | **+17%**    |
-| **Mean Innovation**     | 5.48 m               | 9.30 m               | **+70%**    |
-| **Max Innovation**      | 305.08 m             | 329.87 m             | **+8%**     |
-| **Attack Success Rate** | 6.0%                 | 81.7%                | **+1260%**  |
-| **Stealth Rate**        | 93.8%                | 69.0%                | **-26%**    |
+- **Drift Rate**: (as in commit 26e8e3339656bcdfd926b62c6086c759be52cd3e)
+- **Test Duration**: 600 seconds
+- **Mean Position Error**: 15.45 m
+- **Max Position Error**: 235.68 m
+- **Mean Innovation**: 0.52 m
+- **Max Innovation**: 334.12 m
+- **Attack Success Rate**: 83.9%
+- **Stealth Rate**: 99.5%
+
+## Updated Results Comparison
+
+| Metric                  | Version 1 (Original) | Version 2 (Aggressive) | Version 3 (Simple, 600s) | Improvement (V1→V3) |
+| ----------------------- | -------------------- | -------------------- | ------------------------ | ------------------- |
+| **Mean Position Error** | 6.18 m               | 13.97 m              | 15.45 m                  | **+150%**           |
+| **Max Position Error**  | 251.78 m             | 294.03 m             | 235.68 m                 | -6%                 |
+| **Mean Innovation**     | 5.48 m               | 9.30 m               | 0.52 m                   | **-90%**            |
+| **Max Innovation**      | 305.08 m             | 329.87 m             | 334.12 m                 | +10%                |
+| **Attack Success Rate** | 6.0%                 | 81.7%                | 83.9%                    | **+1298%**          |
+| **Stealth Rate**        | 93.8%                | 69.0%                | 99.5%                    | **+6%**             |
+
+### **600-Second Simple Attack Analysis**
+
+- The simple attack, when run for 600 seconds, achieved a much higher mean position error and attack success rate than the original short test, while maintaining extremely high stealth.
+- The mean innovation was much lower than in previous tests, indicating the attack was rarely detected by the innovation threshold.
+- This result demonstrates that even basic attacks can be highly effective over longer durations, and that innovation-based detection may not be sufficient for persistent, slow-drift attacks.
 
 ## Detailed Analysis
 
@@ -103,8 +120,6 @@ This document compares two versions of the innovation-aware gradual drift attack
 
 ## Research Implications
 
-
-
 The Aggressive attack successfully demonstrates that:
 
 1. **Sophisticated attacks can overcome Kalman filters** (81.7% success rate)
@@ -118,8 +133,6 @@ The Aggressive attack successfully demonstrates that:
 3. **Parameter Tuning**: Balance needed between attack success and stealth
 
 ## Recommendations
-
-
 
 ## Conclusion
 
