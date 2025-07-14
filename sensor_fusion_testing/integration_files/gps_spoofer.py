@@ -35,10 +35,13 @@ class GPSSpoofer:
         self.max_suspicious_readings = 3
         
         # Enhanced gradual drift parameters
-        self.adaptive_drift_rate = 0.05  # m/s - reduced for subtlety
+        self.adaptive_drift_rate = 0.15  # m/s - increased for more effectiveness
         self.drift_direction = np.array([1.0, 0.0, 0.0])  # Start drifting in X direction
-        self.drift_amplitude = 0.02  # meters - small fluctuations
-        self.drift_frequency = 0.1  # Hz - slow oscillations
+        self.drift_amplitude = 0.05  # meters - increased fluctuations
+        self.drift_frequency = 0.05  # Hz - slower oscillations for more persistent drift
+        self.min_drift_rate = 0.02  # m/s - minimum drift rate to maintain effectiveness
+        self.max_drift_rate = 0.25  # m/s - maximum drift rate
+        self.innovation_safety_margin = 0.7  # Reduce drift when innovation > 70% of threshold
         
     def spoof_position(self, true_position, innovation=None):
         """
@@ -85,30 +88,43 @@ class GPSSpoofer:
         """
         elapsed_time = time.time() - self.time_start
         
-        # Calculate base drift
-        base_drift = self.adaptive_drift_rate * elapsed_time
+        # Calculate base drift with exponential growth for more persistent effect
+        base_drift = self.adaptive_drift_rate * elapsed_time * (1 + 0.1 * elapsed_time)
         
-        # Add small oscillations to make the drift more realistic
+        # Add oscillations to make the drift more realistic
         oscillation = self.drift_amplitude * np.sin(2 * np.pi * self.drift_frequency * elapsed_time)
         
-        # Adaptive drift direction based on innovation
-        if self.current_innovation > self.innovation_threshold * 0.8:
-            # If approaching threshold, reduce drift rate
-            adaptive_rate = self.adaptive_drift_rate * 0.5
-        elif self.suspicious_counter > 1:
-            # If suspicious readings detected, pause drift
+        # Enhanced adaptive logic based on innovation
+        if self.current_innovation > self.innovation_threshold * self.innovation_safety_margin:
+            # If approaching threshold, reduce drift rate but maintain minimum
+            adaptive_rate = max(self.min_drift_rate, self.adaptive_drift_rate * 0.3)
+        elif self.suspicious_counter > 2:
+            # If multiple suspicious readings detected, pause drift temporarily
             adaptive_rate = 0.0
+        elif self.suspicious_counter > 0:
+            # If some suspicious readings, reduce drift rate
+            adaptive_rate = max(self.min_drift_rate, self.adaptive_drift_rate * 0.6)
         else:
-            # Normal drift rate
-            adaptive_rate = self.adaptive_drift_rate
+            # Normal drift rate with some variation
+            adaptive_rate = self.adaptive_drift_rate * (0.8 + 0.4 * random.random())
+            adaptive_rate = min(self.max_drift_rate, adaptive_rate)
         
-        # Calculate drift vector
+        # Calculate drift vector with enhanced direction changes
         drift_vector = self.drift_direction * (base_drift * adaptive_rate / self.adaptive_drift_rate + oscillation)
+        
+        # Add directional changes over time to make attack more sophisticated
+        if elapsed_time > 10.0:  # After 10 seconds, start changing direction
+            direction_change = np.array([
+                np.sin(elapsed_time * 0.1) * 0.3,
+                np.cos(elapsed_time * 0.1) * 0.3,
+                0.0
+            ], dtype=np.float64)
+            drift_vector += direction_change
         
         # Add small random perturbations
         random_perturbation = np.array([
-            random.uniform(-0.01, 0.01),
-            random.uniform(-0.01, 0.01),
+            random.uniform(-0.02, 0.02),
+            random.uniform(-0.02, 0.02),
             0.0
         ], dtype=np.float64)
         

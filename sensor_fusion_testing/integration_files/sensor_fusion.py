@@ -39,7 +39,7 @@ class SensorFusion:
         self.last_imu_timestamp = None
         
         # Innovation tracking
-        self.current_innovation = None
+        self.current_innovation = 0.0  # Initialize to 0.0 instead of None
         self.innovation_history = []
         self.max_innovation_history = 100
         
