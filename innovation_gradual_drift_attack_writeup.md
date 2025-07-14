@@ -250,11 +250,32 @@ The simple attack, when run for a longer duration (10 minutes), achieved both hi
 
 ---
 
+## New 1800-Second Simple Attack Results (Original Version)
+
+**Configuration:**
+
+- Simple gradual drift attack (as in commit 26e8e3339656bcdfd926b62c6086c759be52cd3e)
+- Test duration: 1800 seconds (30 minutes)
+
+**Performance:**
+
+- **Mean Position Error:** 45.14 meters
+- **Max Position Error:** 230.08 meters
+- **Mean Innovation:** 0.18 meters
+- **Max Innovation:** 301.76 meters
+- **Attack Success Rate:** 94.6% (time with error > 5m)
+- **Stealth Rate:** 99.8% (time below 5.0m threshold)
+
+**Analysis:**
+The simple attack, when run for an extended duration (30 minutes), achieved even higher effectiveness and maintained extremely high stealth. The mean position error increased to 45.14 meters, and the attack success rate reached 94.6%, with the system remaining stealthy 99.8% of the time. This further demonstrates that persistent, slow-drift attacks can completely bypass innovation-based detection over long periods, highlighting the urgent need for more advanced detection mechanisms.
+
+---
+
 ## Updated Key Research Findings
 
-- The 600-second simple attack run shows that attack effectiveness can increase dramatically with longer test durations, even for basic attack strategies.
-- The high stealth rate (99.5%) indicates that the innovation threshold was rarely exceeded, highlighting a limitation of threshold-based detection for slow, persistent attacks.
-- These results reinforce the need for more advanced, possibly machine learning-based, detection mechanisms.
+- The 1800-second simple attack run shows that attack effectiveness and stealth can both increase with longer test durations, even for basic attack strategies.
+- The extremely high stealth rate (99.8%) and low mean innovation (0.18m) indicate that the innovation threshold was almost never exceeded, making threshold-based detection ineffective for such attacks.
+- These results provide even stronger evidence for the need for advanced, possibly machine learning-based, detection mechanisms.
 
 ---
 
