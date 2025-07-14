@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-This report presents the results of testing an advanced gradual drift GPS spoofing attack against a Kalman filter-based sensor fusion system. The attack was designed to demonstrate that sophisticated GPS spoofing can overcome traditional sensor fusion defenses, even when the attacker has knowledge of the victim's true position. Two variations of the attack were tested: a conservative approach prioritizing stealth and an aggressive approach maximizing effectiveness.
+This report presents the results of testing an advanced gradual drift GPS spoofing attack against a Kalman filter-based sensor fusion system. The attack was designed to demonstrate that sophisticated GPS spoofing can overcome traditional sensor fusion defenses, when the attacker has knowledge of the victim's true position. Two variations of the attack were tested: a conservative approach prioritizing stealth and an aggressive approach maximizing effectiveness.
 
 ## Research Context and Objectives
 
