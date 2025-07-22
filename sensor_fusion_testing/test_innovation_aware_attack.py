@@ -4,6 +4,7 @@ import sys
 import glob
 import os
 import json
+import matplotlib.pyplot as plt
 
 # Add current directory to Python path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -83,9 +84,22 @@ class InnovationAwareAttackTest:
             return False
     
     def collect_data(self, duration=60):
-        """Collect data during the attack test"""
+        """Collect data during the attack test with real-time trajectory plotting"""
         print(f"Starting data collection for {duration} seconds...")
         start_time = time.time()
+        
+        # Real-time plotting setup
+        plt.ion()
+        fig, ax = plt.subplots()
+        true_xs, true_ys = [], []
+        fused_xs, fused_ys = [] , []
+        true_line, = ax.plot([], [], 'b-', label='True Position')
+        fused_line, = ax.plot([], [], 'r-', label='Spoofed Position')
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_title('Vehicle Trajectory (Real-Time)')
+        ax.legend()
+        plt.show(block=False)
         
         while time.time() - start_time < duration:
             try:
@@ -108,6 +122,17 @@ class InnovationAwareAttackTest:
                     self.data['position_error'].append(position_error)
                     self.data['attack_active'].append(1)  # Attack is always active in this test
                     
+                    # Real-time plot update
+                    true_xs.append(true_pos[0])
+                    true_ys.append(true_pos[1])
+                    fused_xs.append(fused_pos[0])
+                    fused_ys.append(fused_pos[1])
+                    true_line.set_data(true_xs, true_ys)
+                    fused_line.set_data(fused_xs, fused_ys)
+                    ax.relim()
+                    ax.autoscale_view()
+                    plt.pause(0.001)
+                    
                     # Print progress every 10 seconds
                     if int(current_time) % 10 == 0 and current_time > 0:
                         print(f"Time: {current_time:.1f}s, Error: {position_error:.2f}m, Innovation: {innovation_stats['current_innovation']:.2f}m")
@@ -121,6 +146,8 @@ class InnovationAwareAttackTest:
                 print(f"Error during data collection: {e}")
                 break
         
+        plt.ioff()
+        plt.close(fig)
         print("Data collection complete")
     
     def analyze_results(self):
@@ -205,6 +232,27 @@ class InnovationAwareAttackTest:
         
         print(f"\nResults saved to: {filename}")
     
+    def save_trajectory_plot(self):
+        """Save a static trajectory plot as PNG in plotmaps directory."""
+        true_positions = np.array(self.data['true_position'])
+        fused_positions = np.array(self.data['fused_position'])
+        if true_positions.size == 0 or fused_positions.size == 0:
+            print("No trajectory data to plot.")
+            return
+        plt.figure()
+        plt.plot(true_positions[:, 0], true_positions[:, 1], 'b-', label='True Position')
+        plt.plot(fused_positions[:, 0], fused_positions[:, 1], 'r-', label='Spoofed Position')
+        plt.xlabel('X')
+        plt.ylabel('Y')
+        plt.title('Vehicle Trajectory')
+        plt.legend()
+        plt.tight_layout()
+        os.makedirs('sensor_fusion_testing/plotmaps', exist_ok=True)
+        filename = f"sensor_fusion_testing/plotmaps/trajectory_{int(time.time())}.png"
+        plt.savefig(filename)
+        plt.close()
+        print(f"Trajectory plot saved to: {filename}")
+    
     def print_summary(self, results):
         """Print a summary of the attack effectiveness"""
         print("\n" + "="*60)
@@ -267,6 +315,9 @@ class InnovationAwareAttackTest:
             
             # Save results
             self.save_results(results)
+            
+            # Save trajectory plot
+            self.save_trajectory_plot()
             
             # Print summary
             self.print_summary(results)

@@ -251,3 +251,30 @@ When adding new features:
 - The framework is designed for research and testing purposes
 - All position data is in CARLA's coordinate system (meters)
 - Time measurements are in seconds from simulation start
+
+## Matplotlib Windows ImportError Note
+
+**Important:**
+
+If you encounter an error like:
+
+```
+ImportError: DLL load failed while importing _c_internal_utils: The specified module could not be found.
+```
+
+This is due to a known bug with the matplotlib 3.9.1 wheels on Windows (see [matplotlib issue #28551](https://github.com/matplotlib/matplotlib/issues/28551)).
+
+**How to fix:**
+
+- Upgrade to matplotlib version 3.10.3 or later:
+  ```sh
+  pip install matplotlib>=3.10.3
+  ```
+- Alternatively, you can force pip to only use binary wheels (never build from source):
+  ```sh
+  pip install --only-binary "matplotlib" matplotlib
+  ```
+
+**Do not use matplotlib 3.9.1 on Windows.**
+
+For more details, see the [official comment from the maintainer](https://github.com/matplotlib/matplotlib/issues/28551#issuecomment-2249649647).
