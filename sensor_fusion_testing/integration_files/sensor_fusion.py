@@ -84,7 +84,12 @@ class SensorFusion:
             innovation = self.kf.update_with_gps(self.gps_data)
             self.current_innovation = innovation
             
-            # Track innovation history
+            # Track innovation history - add defensive check
+            if not hasattr(self, 'innovation_history'):
+                self.innovation_history = []
+            if not hasattr(self, 'max_innovation_history'):
+                self.max_innovation_history = 100
+                
             self.innovation_history.append(innovation)
             if len(self.innovation_history) > self.max_innovation_history:
                 self.innovation_history.pop(0)
