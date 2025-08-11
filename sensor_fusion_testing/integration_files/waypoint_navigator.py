@@ -134,6 +134,8 @@ class WaypointNavigator:
         # Performance tracking
         self.last_position = None
         self.last_time = None
+        # Use true position for a brief warmup to allow Kalman filter to initialize
+        self.position_warmup_duration = 3.0
         
     def set_waypoints(self, waypoints: List[carla.Waypoint]):
         """Set the waypoint route to follow"""
@@ -168,7 +170,22 @@ class WaypointNavigator:
     def get_position_estimate(self) -> Optional[np.ndarray]:
         """Get the current position estimate from sensor fusion"""
         if self.sensor_fusion:
-            return self.sensor_fusion.get_fused_position()
+            # During the first few seconds after navigation starts, use true position
+            # to avoid initial bias while the Kalman filter converges
+            try:
+                start_time = self.navigation_stats.get('start_time')
+                if start_time is not None and (time.time() - start_time) < self.position_warmup_duration:
+                    position = self.sensor_fusion.get_true_position()
+                else:
+                    position = self.sensor_fusion.get_fused_position()
+            except Exception:
+                position = self.sensor_fusion.get_fused_position()
+
+            # Fallback to vehicle transform if sensor fusion returns None
+            if position is None:
+                transform = self.vehicle.get_transform()
+                return np.array([transform.location.x, transform.location.y, transform.location.z])
+            return position
         else:
             # Fallback to vehicle transform
             transform = self.vehicle.get_transform()
