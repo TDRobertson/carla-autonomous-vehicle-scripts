@@ -23,6 +23,7 @@ class GPSSpoofer:
         # Spoofing parameters
         self.drift_rate = 0.1  # meters per second
         self.jump_magnitude = 5.0  # meters
+        self.jump_probability = 0.01  # probability per step for sudden jumps
         self.random_walk_step = 0.5  # meters
         self.replay_delay = 2.0  # seconds
         
@@ -152,7 +153,7 @@ class GPSSpoofer:
         """
         Create sudden jumps in position
         """
-        if random.random() < 0.01:  # 1% chance of jumping
+        if random.random() < self.jump_probability:  # configurable chance of jumping
             jump = np.array([
                 random.uniform(-self.jump_magnitude, self.jump_magnitude),
                 random.uniform(-self.jump_magnitude, self.jump_magnitude),
@@ -180,8 +181,10 @@ class GPSSpoofer:
         # Record current position
         self.replay_buffer.append(true_position)
         
-        # If we have enough data, start replaying
-        if len(self.replay_buffer) > 100:
+        # If we have enough buffered history, start replaying
+        # Approximate GPS callback at ~10 Hz -> gate by replay_delay seconds
+        gate = max(1, int(self.replay_delay * 10.0))
+        if len(self.replay_buffer) > gate:
             if self.replay_index >= len(self.replay_buffer):
                 self.replay_index = 0
             position = self.replay_buffer[self.replay_index]

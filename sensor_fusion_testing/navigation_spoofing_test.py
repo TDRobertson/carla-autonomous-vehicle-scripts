@@ -58,6 +58,16 @@ def parse_args():
                         help='1=GRADUAL_DRIFT, 2=SUDDEN_JUMP, 3=RANDOM_WALK, 4=REPLAY, 5=ALL_IN_SEQUENCE')
     parser.add_argument('--duration', type=float, default=60.0, help='Total duration (seconds) for single-mode run')
     parser.add_argument('--speed', type=float, default=20.0, help='Max target speed (m/s)')
+    # Spoofing overrides
+    parser.add_argument('--drift-rate', type=float, default=None, help='Gradual drift rate (m/s)')
+    parser.add_argument('--adaptive-drift-rate', type=float, default=None, help='Innovation-aware base drift rate (m/s)')
+    parser.add_argument('--drift-amp', type=float, default=None, help='Innovation-aware drift amplitude (m)')
+    parser.add_argument('--drift-freq', type=float, default=None, help='Innovation-aware drift frequency (Hz)')
+    parser.add_argument('--jump-magnitude', type=float, default=None, help='Sudden jump magnitude (m)')
+    parser.add_argument('--jump-prob', type=float, default=None, help='Sudden jump probability per step (0-1)')
+    parser.add_argument('--random-walk-step', type=float, default=None, help='Random walk step size (m)')
+    parser.add_argument('--innovation-threshold', type=float, default=None, help='Innovation threshold (m)')
+    parser.add_argument('--replay-delay', type=float, default=None, help='Target replay delay in seconds')
     return parser.parse_args()
 
 
@@ -104,7 +114,7 @@ def generate_simple_route(world: carla.World, vehicle: carla.Vehicle):
         return []
 
 
-def run_single_mode(vehicle: carla.Vehicle, waypoints, duration_seconds: float, speed_mps: float, strategy: SpoofingStrategy):
+def run_single_mode(vehicle: carla.Vehicle, waypoints, duration_seconds: float, speed_mps: float, strategy: SpoofingStrategy, cli_args=None):
     """Run navigation in a single spoofing mode for the specified duration."""
     navigator = None
     try:
@@ -119,6 +129,40 @@ def run_single_mode(vehicle: carla.Vehicle, waypoints, duration_seconds: float, 
                 'steering': {'Kp': 0.8, 'Ki': 0.01, 'Kd': 0.1}
             }
         )
+
+        # Apply CLI spoofing overrides if provided
+        spoofer = getattr(navigator.sensor_fusion, 'spoofer', None)
+        if spoofer is not None and cli_args is not None:
+            applied = {}
+            if getattr(cli_args, 'drift_rate', None) is not None:
+                spoofer.drift_rate = cli_args.drift_rate
+                applied['drift_rate'] = cli_args.drift_rate
+            if getattr(cli_args, 'adaptive_drift_rate', None) is not None:
+                spoofer.adaptive_drift_rate = cli_args.adaptive_drift_rate
+                applied['adaptive_drift_rate'] = cli_args.adaptive_drift_rate
+            if getattr(cli_args, 'drift_amp', None) is not None:
+                spoofer.drift_amplitude = cli_args.drift_amp
+                applied['drift_amplitude'] = cli_args.drift_amp
+            if getattr(cli_args, 'drift_freq', None) is not None:
+                spoofer.drift_frequency = cli_args.drift_freq
+                applied['drift_frequency'] = cli_args.drift_freq
+            if getattr(cli_args, 'jump_magnitude', None) is not None:
+                spoofer.jump_magnitude = cli_args.jump_magnitude
+                applied['jump_magnitude'] = cli_args.jump_magnitude
+            if getattr(cli_args, 'jump_prob', None) is not None and hasattr(spoofer, 'jump_probability'):
+                spoofer.jump_probability = cli_args.jump_prob
+                applied['jump_probability'] = cli_args.jump_prob
+            if getattr(cli_args, 'random_walk_step', None) is not None:
+                spoofer.random_walk_step = cli_args.random_walk_step
+                applied['random_walk_step'] = cli_args.random_walk_step
+            if getattr(cli_args, 'innovation_threshold', None) is not None:
+                spoofer.innovation_threshold = cli_args.innovation_threshold
+                applied['innovation_threshold'] = cli_args.innovation_threshold
+            if getattr(cli_args, 'replay_delay', None) is not None:
+                spoofer.replay_delay = cli_args.replay_delay
+                applied['replay_delay'] = cli_args.replay_delay
+            if applied:
+                print(f"Applied spoofing overrides: {applied}")
 
         navigator.set_waypoints(waypoints)
         if not navigator.start_navigation():
@@ -172,7 +216,7 @@ def run_single_mode(vehicle: carla.Vehicle, waypoints, duration_seconds: float, 
             navigator.cleanup()
 
 
-def run_all_in_sequence(vehicle: carla.Vehicle, waypoints, speed_mps: float, segment_seconds: float = 45.0):
+def run_all_in_sequence(vehicle: carla.Vehicle, waypoints, speed_mps: float, segment_seconds: float = 45.0, cli_args=None):
     """Run all four spoofing strategies sequentially over the same waypoint list."""
     order = [
         SpoofingStrategy.GRADUAL_DRIFT,
@@ -182,7 +226,7 @@ def run_all_in_sequence(vehicle: carla.Vehicle, waypoints, speed_mps: float, seg
     ]
     for strategy in order:
         print(f"\n=== Running segment with {strategy.name} ===")
-        ok = run_single_mode(vehicle, waypoints, duration_seconds=segment_seconds, speed_mps=speed_mps, strategy=strategy)
+        ok = run_single_mode(vehicle, waypoints, duration_seconds=segment_seconds, speed_mps=speed_mps, strategy=strategy, cli_args=cli_args)
         if not ok:
             print(f"Segment failed: {strategy.name}")
     print("\nAll segments complete")
@@ -206,15 +250,15 @@ def main():
             return
 
         if args.mode == 1:
-            run_single_mode(vehicle, waypoints, args.duration, args.speed, SpoofingStrategy.GRADUAL_DRIFT)
+            run_single_mode(vehicle, waypoints, args.duration, args.speed, SpoofingStrategy.GRADUAL_DRIFT, cli_args=args)
         elif args.mode == 2:
-            run_single_mode(vehicle, waypoints, args.duration, args.speed, SpoofingStrategy.SUDDEN_JUMP)
+            run_single_mode(vehicle, waypoints, args.duration, args.speed, SpoofingStrategy.SUDDEN_JUMP, cli_args=args)
         elif args.mode == 3:
-            run_single_mode(vehicle, waypoints, args.duration, args.speed, SpoofingStrategy.RANDOM_WALK)
+            run_single_mode(vehicle, waypoints, args.duration, args.speed, SpoofingStrategy.RANDOM_WALK, cli_args=args)
         elif args.mode == 4:
-            run_single_mode(vehicle, waypoints, args.duration, args.speed, SpoofingStrategy.REPLAY)
+            run_single_mode(vehicle, waypoints, args.duration, args.speed, SpoofingStrategy.REPLAY, cli_args=args)
         elif args.mode == 5:
-            run_all_in_sequence(vehicle, waypoints, speed_mps=args.speed, segment_seconds=max(30.0, args.duration / 4.0))
+            run_all_in_sequence(vehicle, waypoints, speed_mps=args.speed, segment_seconds=max(30.0, args.duration / 4.0), cli_args=args)
 
     except KeyboardInterrupt:
         print("Interrupted by user")
@@ -226,6 +270,7 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
 
 

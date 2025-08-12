@@ -173,6 +173,67 @@ python sensor_fusion_testing/integration_files/sequential_attack_test.py
 python sensor_fusion_testing/integration_files/data_processor.py
 ```
 
+### Navigation Spoofing Test (Waypoint + Fusion + Attacks)
+
+Run a waypoint navigation demo that uses sensor fusion and applies GPS spoofing attacks. Select the attack mode and optionally override attack parameters from the CLI.
+
+Modes:
+
+- 1 = Gradual drift
+- 2 = Sudden jump
+- 3 = Random walk
+- 4 = Replay
+- 5 = Run all four in sequence
+
+Basic usage:
+
+```bash
+python navigation_spoofing_test.py --mode 1 --duration 60 --speed 20
+```
+
+CLI overrides (examples):
+
+```bash
+# Gradual drift (mild vs aggressive)
+python navigation_spoofing_test.py --mode 1 --drift-rate 0.05
+python navigation_spoofing_test.py --mode 1 --drift-rate 0.25
+
+# Innovation-aware drift
+python navigation_spoofing_test.py --mode 1 \
+  --adaptive-drift-rate 0.22 --drift-amp 0.08 --drift-freq 0.05
+
+# Sudden jump (bigger, more frequent)
+python navigation_spoofing_test.py --mode 2 --jump-magnitude 12 --jump-prob 0.05
+
+# Random walk (noisier)
+python navigation_spoofing_test.py --mode 3 --random-walk-step 1.0
+
+# Replay with ~5 s delay
+python navigation_spoofing_test.py --mode 4 --replay-delay 5
+
+# Keep attacker’s awareness aligned with mitigation assumptions
+python navigation_spoofing_test.py --mode 1 --innovation-threshold 5.0
+```
+
+Parameters:
+
+- `--drift-rate` (m): amplitude of sinusoidal bias for basic gradual drift.
+- `--adaptive-drift-rate` (m/s): base growth rate for innovation-aware drift.
+- `--drift-amp` (m): oscillation amplitude added to innovation-aware drift.
+- `--drift-freq` (Hz): oscillation frequency for innovation-aware drift.
+- `--jump-magnitude` (m): size of sudden jumps.
+- `--jump-prob` (0–1): probability of a jump each control step.
+- `--random-walk-step` (m): max per-axis random-walk step size.
+- `--innovation-threshold` (m): attacker’s awareness threshold used to modulate aggression.
+- `--replay-delay` (s): approximate lag before replay starts; buffer gate assumes ~10 Hz GPS.
+
+Notes:
+
+- Gradual drift direction traces a small circle in the XY plane over time (world frame).
+- Innovation-aware drift starts along +X in world coordinates and adds slow directional changes and noise to remain stealthy.
+- Sudden jumps can be attenuated by a small Kalman gain, but frequent/large jumps still displace the fused state.
+- Replay reuses earlier true positions after the delay, appearing locally smooth but wrong in absolute terms.
+
 ### Individual Component Testing
 
 ```bash
