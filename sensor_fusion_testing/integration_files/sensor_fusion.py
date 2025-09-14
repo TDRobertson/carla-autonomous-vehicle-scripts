@@ -5,6 +5,7 @@ import glob
 import os
 from .advanced_kalman_filter import AdvancedKalmanFilter
 from .gps_spoofer import GPSSpoofer, SpoofingStrategy
+from .position_display import PositionDisplay
 
 # Add the CARLA Python API to PYTHONPATH
 try:
@@ -18,10 +19,11 @@ except IndexError:
 import carla
 
 class SensorFusion:
-    def __init__(self, vehicle, enable_spoofing=False, spoofing_strategy=SpoofingStrategy.GRADUAL_DRIFT):
+    def __init__(self, vehicle, enable_spoofing=False, spoofing_strategy=SpoofingStrategy.GRADUAL_DRIFT, enable_display=True):
         self.vehicle = vehicle
         self.kf = AdvancedKalmanFilter()
         self.enable_spoofing = enable_spoofing
+        self.enable_display = enable_display
         
         # Initialize spoofer first
         self.spoofer = None
@@ -30,6 +32,12 @@ class SensorFusion:
         
         # Initialize sensors
         self.setup_sensors()
+        
+        # Initialize position display
+        if self.enable_display:
+            self.position_display = PositionDisplay(vehicle.get_world(), vehicle)
+        else:
+            self.position_display = None
         
         # Data storage
         self.gps_data = None
@@ -73,7 +81,7 @@ class SensorFusion:
         # Apply spoofing if enabled
         if self.enable_spoofing and self.spoofer is not None:
             # Pass current innovation to spoofer for innovation-aware attacks
-            innovation = self.current_innovation if self.current_innovation is not None else 0.0
+            innovation = getattr(self, 'current_innovation', 0.0)
             self.gps_data = self.spoofer.spoof_position(self.true_position, innovation)
         else:
             self.gps_data = self.true_position
@@ -95,6 +103,24 @@ class SensorFusion:
                 self.innovation_history.pop(0)
                 
             self.fused_position = self.kf.position.copy()
+            
+            # Update position display
+            if self.position_display is not None:
+                attack_type = self.spoofer.strategy.name if self.spoofer else "None"
+                self.position_display.update_positions(
+                    self.true_position, 
+                    self.fused_position, 
+                    attack_type=attack_type,
+                    innovation=innovation
+                )
+                # Calculate velocity error for display
+                true_velocity = self.get_true_velocity()
+                fused_velocity = self.get_fused_velocity()
+                if true_velocity is not None and fused_velocity is not None:
+                    velocity_error = np.linalg.norm(true_velocity - fused_velocity)
+                    self.position_display.update_velocity_error(velocity_error)
+                self.position_display.draw_position_info()
+                self.position_display.draw_console_output()
         
     def imu_callback(self, data):
         # Use CARLA's simulation time for timestamp
@@ -172,6 +198,8 @@ class SensorFusion:
             self.gps_sensor.destroy()
         if self.imu_sensor:
             self.imu_sensor.destroy()
+        if self.position_display is not None:
+            self.position_display.cleanup()
 
 def find_spawn_point(world):
     """
