@@ -20,12 +20,12 @@ class GPSSpoofer:
         self.replay_buffer = []
         self.replay_index = 0
         
-        # Spoofing parameters
-        self.drift_rate = 0.1  # meters per second
-        self.jump_magnitude = 5.0  # meters
-        self.jump_probability = 0.01  # probability per step for sudden jumps
-        self.random_walk_step = 0.5  # meters
-        self.replay_delay = 2.0  # seconds
+        # Spoofing parameters - MADE MORE AGGRESSIVE
+        self.drift_rate = 0.2  # meters per second (was 0.1)
+        self.jump_magnitude = 5.0  # meters (was 5.0)
+        self.jump_probability = 0.02  # probability per step for sudden jumps (was 0.01)
+        self.random_walk_step = 2.0  # meters (was 0.5)
+        self.replay_delay = 2.0  # seconds (was 2.0)
         
         # Innovation-aware parameters
         self.innovation_threshold = 5.0  # meters - threshold for detection
@@ -139,24 +139,44 @@ class GPSSpoofer:
     
     def _gradual_drift(self, true_position):
         """
-        Gradually drift away from the true position
+        Gradually drift away from the true position - ENHANCED FOR VISIBILITY
         """
         elapsed_time = time.time() - self.time_start
+        
+        # Create a more aggressive drift pattern
+        # Use exponential growth to make drift more visible over time
+        drift_amplitude = self.drift_rate * elapsed_time * (1 + 0.2 * elapsed_time)
+        
+        # Create a figure-8 pattern for more dramatic movement
         drift = np.array([
-            np.sin(elapsed_time) * self.drift_rate,
-            np.cos(elapsed_time) * self.drift_rate,
+            np.sin(elapsed_time * 0.5) * drift_amplitude,
+            np.sin(elapsed_time * 0.3) * drift_amplitude * 0.7,
             0.0  # Keep z-coordinate unchanged
         ], dtype=np.float64)
-        return true_position + drift
+        
+        # Add some random variation to make it less predictable
+        random_variation = np.array([
+            random.uniform(-0.5, 0.5),
+            random.uniform(-0.5, 0.5),
+            0.0
+        ], dtype=np.float64)
+        
+        return true_position + drift + random_variation
     
     def _sudden_jump(self, true_position):
         """
-        Create sudden jumps in position
+        Create sudden jumps in position - ENHANCED FOR VISIBILITY
         """
-        if random.random() < self.jump_probability:  # configurable chance of jumping
+        # Increase probability over time to make jumps more frequent
+        elapsed_time = time.time() - self.time_start
+        dynamic_probability = self.jump_probability * (1 + elapsed_time * 0.1)
+        
+        if random.random() < dynamic_probability:
+            # Create larger, more dramatic jumps
+            jump_magnitude = self.jump_magnitude * (1 + random.random())
             jump = np.array([
-                random.uniform(-self.jump_magnitude, self.jump_magnitude),
-                random.uniform(-self.jump_magnitude, self.jump_magnitude),
+                random.uniform(-jump_magnitude, jump_magnitude),
+                random.uniform(-jump_magnitude, jump_magnitude),
                 0.0
             ], dtype=np.float64)
             self.current_position = true_position + jump
@@ -164,11 +184,15 @@ class GPSSpoofer:
     
     def _random_walk(self, true_position):
         """
-        Create a random walk pattern
+        Create a random walk pattern - ENHANCED FOR VISIBILITY
         """
+        # Make steps larger and more frequent over time
+        elapsed_time = time.time() - self.time_start
+        step_multiplier = 1 + elapsed_time * 0.1
+        
         step = np.array([
-            random.uniform(-self.random_walk_step, self.random_walk_step),
-            random.uniform(-self.random_walk_step, self.random_walk_step),
+            random.uniform(-self.random_walk_step, self.random_walk_step) * step_multiplier,
+            random.uniform(-self.random_walk_step, self.random_walk_step) * step_multiplier,
             0.0
         ], dtype=np.float64)
         self.current_position = true_position + step
