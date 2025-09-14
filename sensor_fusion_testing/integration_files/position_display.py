@@ -67,21 +67,90 @@ class PositionDisplay:
         
         # Get camera viewport for text positioning
         try:
-            # Draw text in the top-left corner of the screen
-            self._draw_text_overlay()
-            
             # Draw 3D position markers in the world
             self._draw_3d_markers()
+            
+            # Draw text overlay above vehicle
+            self._draw_text_overlay()
             
         except Exception as e:
             # Silently handle any drawing errors
             pass
             
     def _draw_text_overlay(self):
-        """Draw text overlay on screen"""
-        # This is a simplified approach - CARLA doesn't have built-in text overlay
-        # We'll use debug text in 3D space instead
-        pass
+        """Draw text overlay on screen using 3D text positioned above vehicle"""
+        if self.true_position is None or self.sensor_position is None:
+            return
+            
+        try:
+            # Get vehicle position for text placement
+            vehicle_transform = self.vehicle.get_transform()
+            vehicle_location = vehicle_transform.location
+            
+            # Position text above vehicle
+            text_height = 15.0  # Height above vehicle
+            text_location = carla.Location(
+                x=vehicle_location.x,
+                y=vehicle_location.y,
+                z=vehicle_location.z + text_height
+            )
+            
+            # Draw main info text
+            info_text = f"TRUE: [{self.true_position[0]:.1f}, {self.true_position[1]:.1f}, {self.true_position[2]:.1f}]"
+            self.world.debug.draw_string(
+                text_location,
+                info_text,
+                draw_shadow=True,
+                color=carla.Color(0, 255, 0, 255),  # Green for true position
+                life_time=0.1,
+                persistent_lines=False
+            )
+            
+            # Draw sensor position text below
+            sensor_text_location = carla.Location(
+                x=vehicle_location.x,
+                y=vehicle_location.y,
+                z=vehicle_location.z + text_height - 2.0
+            )
+            
+            sensor_text = f"SENSOR: [{self.sensor_position[0]:.1f}, {self.sensor_position[1]:.1f}, {self.sensor_position[2]:.1f}]"
+            self.world.debug.draw_string(
+                sensor_text_location,
+                sensor_text,
+                draw_shadow=True,
+                color=carla.Color(255, 0, 0, 255),  # Red for sensor position
+                life_time=0.1,
+                persistent_lines=False
+            )
+            
+            # Draw error info below
+            error_text_location = carla.Location(
+                x=vehicle_location.x,
+                y=vehicle_location.y,
+                z=vehicle_location.z + text_height - 4.0
+            )
+            
+            # Choose color based on error magnitude
+            if self.position_error > 5.0:  # High error - red
+                error_color = carla.Color(255, 0, 0, 255)
+            elif self.position_error > 1.0:  # Medium error - yellow
+                error_color = carla.Color(255, 255, 0, 255)
+            else:  # Low error - green
+                error_color = carla.Color(0, 255, 0, 255)
+                
+            error_text = f"ERROR: {self.position_error:.2f}m | ATTACK: {self.attack_type} | INNOVATION: {self.innovation_value:.2f}"
+            self.world.debug.draw_string(
+                error_text_location,
+                error_text,
+                draw_shadow=True,
+                color=error_color,
+                life_time=0.1,
+                persistent_lines=False
+            )
+            
+        except Exception as e:
+            # Silently handle any drawing errors
+            pass
         
     def _draw_3d_markers(self):
         """Draw 3D markers and text in the world"""

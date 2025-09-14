@@ -13,6 +13,7 @@ from integration_files.gps_only_system import GPSOnlySystem
 from integration_files.sensor_fusion import SensorFusion
 from integration_files.gps_spoofer import SpoofingStrategy
 from integration_files.traffic_utils import setup_continuous_traffic, cleanup_traffic_setup
+from integration_files.camera_utils import setup_auto_follow_camera, setup_simple_overhead_camera
 
 import numpy as np
 import time
@@ -122,8 +123,8 @@ def main():
     # Wait for the vehicle to spawn
     time.sleep(2.0)
     
-    # Setup spectator camera
-    setup_spectator(world, vehicle)
+    # Setup overhead camera (looking down at vehicle)
+    auto_camera = setup_simple_overhead_camera(world, vehicle, height=50.0)
     
     # Setup continuous traffic flow (disable traffic lights)
     setup_continuous_traffic(world, vehicle)
@@ -227,6 +228,7 @@ def main():
         print("\nTest interrupted by user")
     finally:
         print("Cleaning up...")
+        auto_camera.cleanup()
         cleanup_traffic_setup(world, vehicle)
         vehicle.destroy()
 
