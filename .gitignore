@@ -18,3 +18,7 @@ sensor_fusion_testing/integration_files/__pycache__/sensor_fusion.cpython-310.py
 reports/*
 gps_only_test_results/*
 gps_vs_fusion_comparison.json
+sensor_fusion_testing/side_by_side_demo.py
+sensor_fusion_testing/PROFESSOR_DEMO_README.md
+presentation*
+sensor_fusion_testing/demo_test_original.py

@@ -11,7 +11,7 @@ class SpoofingStrategy(Enum):
     INNOVATION_AWARE_GRADUAL_DRIFT = 5  # NEW: Innovation-aware gradual drift
 
 class GPSSpoofer:
-    def __init__(self, initial_position, strategy=SpoofingStrategy.GRADUAL_DRIFT):
+    def __init__(self, initial_position, strategy=SpoofingStrategy.GRADUAL_DRIFT, aggressive_mode=False):
         # Ensure initial_position is converted to float64
         self.initial_position = np.array(initial_position, dtype=np.float64)
         self.current_position = np.array(initial_position, dtype=np.float64)
@@ -19,6 +19,7 @@ class GPSSpoofer:
         self.time_start = time.time()
         self.replay_buffer = []
         self.replay_index = 0
+        self.aggressive_mode = aggressive_mode
         
         # Spoofing parameters - MADE MORE AGGRESSIVE
         self.drift_rate = 0.2  # meters per second (was 0.1)
@@ -26,6 +27,11 @@ class GPSSpoofer:
         self.jump_probability = 0.02  # probability per step for sudden jumps (was 0.01)
         self.random_walk_step = 2.0  # meters (was 0.5)
         self.replay_delay = 2.0  # seconds (was 2.0)
+        
+        # Aggressive mode parameters for GPS-only systems
+        if self.aggressive_mode:
+            self.replay_delay = 0.2  # Much faster replay (was 2.0)
+            self.replay_buffer_size = 50  # Larger buffer for more dramatic replay
         
         # Innovation-aware parameters
         self.innovation_threshold = 5.0  # meters - threshold for detection
@@ -204,6 +210,10 @@ class GPSSpoofer:
         """
         # Record current position
         self.replay_buffer.append(true_position)
+        
+        # In aggressive mode, limit buffer size to create more dramatic replay
+        if self.aggressive_mode and len(self.replay_buffer) > self.replay_buffer_size:
+            self.replay_buffer.pop(0)  # Remove oldest position
         
         # If we have enough buffered history, start replaying
         # Approximate GPS callback at ~10 Hz -> gate by replay_delay seconds

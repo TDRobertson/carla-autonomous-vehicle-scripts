@@ -30,12 +30,9 @@ class SensorFusion:
         if self.enable_spoofing:
             self.spoofer = GPSSpoofer([0, 0, 0], strategy=spoofing_strategy)
         
-        # Initialize sensors
-        self.setup_sensors()
-        
-        # Initialize position display
+        # Initialize position display BEFORE sensors (so it's available in callbacks)
         if self.enable_display:
-            self.position_display = PositionDisplay(vehicle.get_world(), vehicle)
+            self.position_display = PositionDisplay(vehicle.get_world(), vehicle, enable_console_output=False)
         else:
             self.position_display = None
         
@@ -50,6 +47,9 @@ class SensorFusion:
         self.current_innovation = 0.0  # Initialize to 0.0 instead of None
         self.innovation_history = []
         self.max_innovation_history = 100
+        
+        # Initialize sensors AFTER position display
+        self.setup_sensors()
         
     def setup_sensors(self):
         # Setup GPS
@@ -105,7 +105,7 @@ class SensorFusion:
             self.fused_position = self.kf.position.copy()
             
             # Update position display
-            if self.position_display is not None:
+            if hasattr(self, 'position_display') and self.position_display is not None:
                 attack_type = self.spoofer.strategy.name if self.spoofer else "None"
                 self.position_display.update_positions(
                     self.true_position, 

@@ -13,12 +13,13 @@ class PositionDisplay:
     Shows true position and sensor-estimated position for attack visualization.
     """
     
-    def __init__(self, world: carla.World, vehicle: carla.Vehicle):
+    def __init__(self, world: carla.World, vehicle: carla.Vehicle, enable_console_output=True):
         self.world = world
         self.vehicle = vehicle
         self.display_enabled = True
         self.last_update_time = 0.0
         self.update_interval = 0.1  # Update every 100ms
+        self.enable_console_output = enable_console_output
         
         # Position data
         self.true_position = None
@@ -254,6 +255,9 @@ class PositionDisplay:
         
     def draw_console_output(self):
         """Draw position information to console"""
+        if not self.enable_console_output:
+            return
+            
         if self.true_position is not None and self.sensor_position is not None:
             print(f"\rTRUE: [{self.true_position[0]:.2f}, {self.true_position[1]:.2f}, {self.true_position[2]:.2f}] | "
                   f"SENSOR: [{self.sensor_position[0]:.2f}, {self.sensor_position[1]:.2f}, {self.sensor_position[2]:.2f}] | "

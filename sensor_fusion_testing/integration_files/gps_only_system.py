@@ -27,17 +27,14 @@ class GPSOnlySystem:
         self.enable_spoofing = enable_spoofing
         self.enable_display = enable_display
         
-        # Initialize spoofer
+        # Initialize spoofer with aggressive mode for GPS-only systems
         self.spoofer = None
         if self.enable_spoofing:
-            self.spoofer = GPSSpoofer([0, 0, 0], strategy=spoofing_strategy)
+            self.spoofer = GPSSpoofer([0, 0, 0], strategy=spoofing_strategy, aggressive_mode=True)
         
-        # Initialize GPS sensor only
-        self.setup_gps_sensor()
-        
-        # Initialize position display
+        # Initialize position display BEFORE sensors (so it's available in callbacks)
         if self.enable_display:
-            self.position_display = PositionDisplay(vehicle.get_world(), vehicle)
+            self.position_display = PositionDisplay(vehicle.get_world(), vehicle, enable_console_output=False)
         else:
             self.position_display = None
         
@@ -55,6 +52,9 @@ class GPSOnlySystem:
         self.position_errors = []
         self.velocity_errors = []
         self.timestamps = []
+        
+        # Initialize GPS sensor AFTER position display
+        self.setup_gps_sensor()
         
     def setup_gps_sensor(self):
         """Setup only the GPS sensor"""
@@ -116,7 +116,7 @@ class GPSOnlySystem:
             self.timestamps.append(current_timestamp)
             
             # Update position display
-            if self.position_display is not None:
+            if hasattr(self, 'position_display') and self.position_display is not None:
                 attack_type = self.spoofer.strategy.name if self.spoofer else "None"
                 self.position_display.update_positions(
                     self.true_position, 
