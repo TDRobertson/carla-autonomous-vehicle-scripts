@@ -158,7 +158,121 @@ See [../analysis.md](../analysis.md) for a detailed summary of the research goal
 
 **Use Case**: Real-time detection and correction of GPS spoofing attacks.
 
+#### `ml_data_collector.py`
+
+**Purpose**: Synchronized data collection for training machine learning models to detect GPS spoofing attacks.
+
+**Features**:
+
+- **Dual GPS Sensor Architecture**: Spawns two GPS sensors at the same vehicle location
+  - Sensor 1: Provides true (unspoofed) GPS readings
+  - Sensor 2: Applies INNOVATION_AWARE_GRADUAL_DRIFT spoofing
+  - Both sensors fire simultaneously, ensuring perfect timestamp synchronization
+- **IMU Interpolation**: IMU data (50 Hz) is interpolated to GPS timestamps (10 Hz) using linear interpolation
+- **Dual Kalman Filters**: Two parallel Kalman filter instances track true and spoofed paths independently
+- **Derived Features**: Calculates ML-ready features including rolling statistics, jerk, and innovation metrics
+- **Configurable Attack Timing**: Separate warmup and attack-delay periods for clean/spoofed data segments
+
+**Design Decisions**:
+
+1. **Why Dual Sensors?** Using two GPS sensors at the same physical location guarantees that true and spoofed readings have identical timestamps. This eliminates synchronization issues that would arise from applying spoofing in post-processing.
+
+2. **Why INNOVATION_AWARE_GRADUAL_DRIFT?** This is the most sophisticated (stealthy) attack strategy. It adapts its drift rate based on Kalman filter innovation values to avoid detection thresholds, making it the hardest attack to detect and thus the most valuable for ML training.
+
+3. **Why Interpolate IMU to GPS?** GPS is the slower sensor (10 Hz vs 50 Hz for IMU). Interpolating IMU data to GPS timestamps ensures every data point has complete sensor information without upsampling GPS data (which would introduce artifacts).
+
+4. **Why Dual Kalman Filters?** Running separate KF instances for true and spoofed paths allows direct comparison of filter behavior. The innovation values from the spoofed KF path are key features for anomaly detection.
+
+5. **Why Separate Clean/Attack Periods?** The configurable `attack_start_delay` allows collection of clean baseline data before spoofing begins. This is essential for one-class classifiers that train only on clean data.
+
+**Data Schema** (per timestamp):
+
+| Field                | Description                               |
+| -------------------- | ----------------------------------------- |
+| `timestamp`          | CARLA simulation time (seconds)           |
+| `true_gps_x/y/z`     | True GPS position (meters)                |
+| `spoofed_gps_x/y/z`  | Spoofed GPS position (meters)             |
+| `imu_accel_x/y/z`    | Accelerometer (m/s^2), interpolated       |
+| `imu_gyro_x/y/z`     | Gyroscope (rad/s), interpolated           |
+| `imu_compass`        | Heading (radians)                         |
+| `kf_true_x/y/z`      | Kalman filter estimate (true GPS path)    |
+| `kf_spoof_x/y/z`     | Kalman filter estimate (spoofed GPS path) |
+| `innovation_true`    | Innovation magnitude (true path)          |
+| `innovation_spoof`   | Innovation magnitude (spoofed path)       |
+| `position_error`     | Euclidean distance: true vs spoofed GPS   |
+| `kf_tracking_error`  | Euclidean distance: true GPS vs KF_spoof  |
+| `velocity_magnitude` | Derived from position change rate         |
+| `is_attack_active`   | Label: 1 if spoofing applied, 0 otherwise |
+
+**Derived Features** (calculated post-collection):
+
+- `accel_magnitude`, `gyro_magnitude` - Sensor magnitudes
+- `jerk_x/y/z`, `jerk_magnitude` - Rate of change of acceleration
+- `position_error_rate` - How fast position error is growing
+- `innovation_spoof_ma/std/max` - Rolling window statistics (window=10)
+- `position_error_ma/std` - Rolling error statistics
+- `gps_drift_x/y/z` - Component-wise drift values
+- `kf_diff_magnitude` - Difference between true and spoofed KF estimates
+
+**MSE Formula**:
+
+The script calculates Mean Squared Error as:
+
+```
+MSE = (1/n) * sum((true_position - spoofed_position)^2)
+RMSE = sqrt(MSE)  # Same units as measurement (meters)
+```
+
+For 3D position error:
+
+```
+SE_i = (x_true - x_spoof)^2 + (y_true - y_spoof)^2 + (z_true - z_spoof)^2
+```
+
+**Output Files**:
+
+- `data/ml_training_data_{timestamp}.csv` - Flat CSV for sklearn/pandas
+- `data/ml_training_data_{timestamp}.json` - Full metadata + raw data
+
+**Use Case**: Generates high-quality, synchronized datasets for training one-class classifiers (Isolation Forest, One-Class SVM, Local Outlier Factor) to detect GPS spoofing attacks.
+
 ## Usage Examples
+
+### ML Training Data Collection
+
+```bash
+# Collect synchronized GPS/IMU data for ML training (default: 60s, outputs to data/)
+python ml_data_collector.py
+
+# Custom duration and timing
+python ml_data_collector.py --duration 120 --warmup 10 --attack-delay 20
+
+# Specify output directory
+python ml_data_collector.py --duration 90 --output-dir my_experiment_data
+```
+
+**Parameters**:
+
+- `--duration`: Total collection time in seconds (default: 60)
+- `--warmup`: Initial warmup before recording starts (default: 5)
+- `--attack-delay`: Seconds of clean data before spoofing begins (default: 10)
+- `--output-dir`: Directory for output files (default: data)
+
+**Example workflow for ML training**:
+
+```bash
+# 1. Start CARLA simulator (CarlaUE4.exe)
+
+# 2. Collect training data (clean + attack periods)
+python ml_data_collector.py --duration 120 --attack-delay 30
+
+# 3. Load the CSV into pandas for ML
+import pandas as pd
+df = pd.read_csv('data/ml_training_data_YYYYMMDD_HHMMSS.csv')
+
+# 4. For one-class classifiers, filter to clean data only
+clean_data = df[df['is_attack_active'] == 0]
+```
 
 ### Complete Pipeline Testing
 
@@ -280,7 +394,24 @@ The framework generates several types of output:
 - `statistics.json`: Statistical analysis of errors and performance
 - Various visualization plots (PNG format)
 
-### Machine Learning Data (`ml_data/`)
+### ML Training Data (`data/`)
+
+Generated by `ml_data_collector.py`:
+
+- `ml_training_data_{timestamp}.csv`: Flat CSV with all features for sklearn/pandas
+- `ml_training_data_{timestamp}.json`: Full JSON with metadata, statistics, and raw data
+
+CSV columns include:
+
+- Raw sensor data: `true_gps_x/y/z`, `spoofed_gps_x/y/z`, `imu_accel_x/y/z`, `imu_gyro_x/y/z`
+- Kalman filter states: `kf_true_x/y/z`, `kf_spoof_x/y/z`, `innovation_true`, `innovation_spoof`
+- Derived features: `position_error`, `kf_tracking_error`, `velocity_magnitude`
+- Rolling statistics: `innovation_spoof_ma`, `position_error_std`, etc.
+- Labels: `is_attack_active` (0 = clean, 1 = spoofed)
+
+### Processed ML Data (`ml_data/`)
+
+Generated by `data_processor.py`:
 
 - `X_train.npy`, `X_test.npy`: Feature matrices
 - `y_train.npy`, `y_test.npy`: Label matrices
