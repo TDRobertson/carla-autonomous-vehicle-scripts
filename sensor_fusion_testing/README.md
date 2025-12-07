@@ -242,6 +242,8 @@ SE_i = (x_true - x_spoof)^2 + (y_true - y_spoof)^2 + (z_true - z_spoof)^2
 
 ### ML Training Data Collection
 
+**Manual Collection:**
+
 ```bash
 # Collect synchronized GPS/IMU data for ML training (default: 60s, outputs to data/)
 python ml_data_collector.py
@@ -253,6 +255,9 @@ python ml_data_collector.py --attack-delay 0
 # Custom duration and timing
 python ml_data_collector.py --duration 120 --warmup 10 --attack-delay 20
 
+# With custom label for organized file naming
+python ml_data_collector.py --duration 120 --attack-delay 30 --label train_run01
+
 # Random attack mode - attacks randomly start/stop
 python ml_data_collector.py --random-attacks --duration 120
 
@@ -261,11 +266,67 @@ python ml_data_collector.py --random-attacks \
   --min-attack-duration 5 --max-attack-duration 20 \
   --min-clean-duration 5 --max-clean-duration 15
 
-# Specify output directory
-python ml_data_collector.py --duration 90 --output-dir my_experiment_data
+# Specify output directory and label
+python ml_data_collector.py --duration 90 --output-dir data/custom --label exp01_run05
 ```
 
-**Parameters**:
+**Automated Collection (Recommended):**
+
+Three automation options are available for batch data collection:
+
+**Option 1: Windows Batch Script**
+
+```cmd
+cd sensor_fusion_testing
+collect_ml_datasets.bat
+```
+
+Menu-driven interface with options:
+
+- Quick Test (5 runs × 60s)
+- One-Class Training (25 runs × 120s)
+- One-Class Validation (5 runs × 180s, random)
+- Supervised Training (20 runs × 120s)
+- Supervised Validation (10 runs × 150s, random)
+- Custom Parameters
+
+**Option 2: Linux/Mac Shell Script**
+
+```bash
+cd sensor_fusion_testing
+chmod +x collect_ml_datasets.sh  # First time only
+./collect_ml_datasets.sh
+```
+
+Same menu-driven interface as Windows version.
+
+**Option 3: Python Collection Manager** (Cross-platform, with progress bars)
+
+```bash
+cd sensor_fusion_testing
+
+# Interactive mode (menu-driven)
+python automated_data_collection.py
+
+# Non-interactive mode (specify preset)
+python automated_data_collection.py --preset quick_test
+python automated_data_collection.py --preset one_class_training
+python automated_data_collection.py --preset supervised_training
+
+# With custom retry settings
+python automated_data_collection.py --preset one_class_training --max-retries 5
+```
+
+**Features of Automation Scripts:**
+
+- Automatic progress tracking
+- Error handling and retry logic
+- CARLA connection health checks
+- Dataset statistics after collection
+- Organized file naming (e.g., `train_run01_ml_training_data_20251207_120001.csv`)
+- Resume capability (skips existing runs)
+
+**Manual Collection Parameters**:
 
 - `--duration`: Total collection time in seconds (default: 60)
 - `--warmup`: Initial warmup before recording starts (default: 5)
@@ -273,6 +334,9 @@ python ml_data_collector.py --duration 90 --output-dir my_experiment_data
   - Set to `0` to start attack immediately - ensures every data point has true/spoofed pairs
   - Useful for testing and supervised learning scenarios
 - `--output-dir`: Directory for output files (default: data)
+- `--label`: Label prefix for output files (e.g., "train_run01", "val_run05")
+  - Output: `{label}_ml_training_data_{timestamp}.csv`
+  - Helps organize datasets by experiment or run number
 - `--random-attacks`: Enable random start/stop attacks (default: False)
   - Creates more realistic training data with unpredictable attack timing
   - Attacks randomly start and stop throughout collection period
@@ -281,7 +345,49 @@ python ml_data_collector.py --duration 90 --output-dir my_experiment_data
 - `--min-clean-duration`: Minimum clean period duration in random mode (default: 5.0)
 - `--max-clean-duration`: Maximum clean period duration in random mode (default: 15.0)
 
+**Automation Script Parameters** (Python manager):
+
+- `--preset`: Choose preset configuration (quick_test, one_class_training, etc.)
+- `--max-retries`: Maximum retry attempts per run if collection fails (default: 3)
+
 **Example workflows for ML training**:
+
+**Recommended: Automated Collection**
+
+```bash
+# 1. Start CARLA simulator (CarlaUE4.exe)
+
+# 2. Run automated collection (Windows)
+cd sensor_fusion_testing
+collect_ml_datasets.bat
+
+# OR (Linux/Mac)
+./collect_ml_datasets.sh
+
+# OR (Python, any platform)
+python automated_data_collection.py --preset one_class_training
+```
+
+**File Organization:**
+
+Automated scripts produce organized outputs:
+
+```
+data/
+├── training/
+│   ├── train_run01_ml_training_data_20251207_120001.csv
+│   ├── train_run01_ml_training_data_20251207_120001.json
+│   ├── train_run02_ml_training_data_20251207_122015.csv
+│   └── ... (25 runs total)
+├── validation/
+│   ├── val_run01_ml_training_data_20251207_130045.csv
+│   └── ... (5 runs total)
+└── test/
+    ├── test_run01_ml_training_data_20251207_140001.csv
+    └── ... (5 runs total)
+```
+
+**Manual Collection Examples:**
 
 **For One-Class Classifiers** (train on clean data only):
 
@@ -289,11 +395,11 @@ python ml_data_collector.py --duration 90 --output-dir my_experiment_data
 # 1. Start CARLA simulator (CarlaUE4.exe)
 
 # 2. Collect data with clean baseline period
-python ml_data_collector.py --duration 120 --attack-delay 30
+python ml_data_collector.py --duration 120 --attack-delay 30 --label train_run01
 
 # 3. Load and filter to clean data only
 import pandas as pd
-df = pd.read_csv('data/ml_training_data_YYYYMMDD_HHMMSS.csv')
+df = pd.read_csv('data/train_run01_ml_training_data_YYYYMMDD_HHMMSS.csv')
 clean_data = df[df['is_attack_active'] == 0]  # Use for training
 attack_data = df[df['is_attack_active'] == 1]  # Use for testing
 ```
@@ -302,7 +408,7 @@ attack_data = df[df['is_attack_active'] == 1]  # Use for testing
 
 ```bash
 # Start attack immediately - every point has both true and spoofed values
-python ml_data_collector.py --attack-delay 0 --duration 60
+python ml_data_collector.py --attack-delay 0 --duration 60 --label test_run01
 ```
 
 **For Realistic Training** (random attack timing):
@@ -311,7 +417,8 @@ python ml_data_collector.py --attack-delay 0 --duration 60
 # Random attacks create unpredictable timing - better generalization
 python ml_data_collector.py --random-attacks --duration 180 \
   --min-attack-duration 5 --max-attack-duration 20 \
-  --min-clean-duration 5 --max-clean-duration 15
+  --min-clean-duration 5 --max-clean-duration 15 \
+  --label realistic_run01
 ```
 
 ### Complete Pipeline Testing

@@ -158,7 +158,8 @@ class MLDataCollector:
         min_attack_duration: float = 5.0,
         max_attack_duration: float = 15.0,
         min_clean_duration: float = 5.0,
-        max_clean_duration: float = 15.0
+        max_clean_duration: float = 15.0,
+        label: str = ""
     ):
         """
         Initialize the ML data collector.
@@ -175,6 +176,7 @@ class MLDataCollector:
             max_attack_duration: Maximum duration of attack periods (random mode)
             min_clean_duration: Minimum duration of clean periods (random mode)
             max_clean_duration: Maximum duration of clean periods (random mode)
+            label: Label prefix for output files (e.g., "train_run01", "val_run05")
         """
         self.vehicle = vehicle
         self.world = vehicle.get_world()
@@ -187,6 +189,7 @@ class MLDataCollector:
         self.max_attack_duration = max_attack_duration
         self.min_clean_duration = min_clean_duration
         self.max_clean_duration = max_clean_duration
+        self.label = label
         
         # Timing
         self.t0: Optional[float] = None  # Simulation time origin
@@ -773,18 +776,25 @@ class MLDataCollector:
         """
         timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
         
+        # Build filename with optional label prefix
+        if self.label:
+            base_filename = f"{self.label}_ml_training_data_{timestamp_str}"
+        else:
+            base_filename = f"ml_training_data_{timestamp_str}"
+        
         # Export CSV for ML training
-        csv_filename = f"ml_training_data_{timestamp_str}.csv"
+        csv_filename = f"{base_filename}.csv"
         csv_path = os.path.join(self.output_dir, csv_filename)
         df.to_csv(csv_path, index=False)
         print(f"Saved CSV: {csv_path}")
         
         # Export JSON with metadata
-        json_filename = f"ml_training_data_{timestamp_str}.json"
+        json_filename = f"{base_filename}.json"
         json_path = os.path.join(self.output_dir, json_filename)
         
         metadata = {
             'collection_timestamp': timestamp_str,
+            'label': self.label if self.label else 'unlabeled',
             'duration_seconds': self.duration,
             'warmup_seconds': self.warmup_duration,
             'attack_start_delay_seconds': self.attack_start_delay,
@@ -876,6 +886,10 @@ def main():
         '--max-clean-duration', type=float, default=15.0,
         help='Maximum clean period duration in random mode (default: 15.0)'
     )
+    parser.add_argument(
+        '--label', type=str, default='',
+        help='Label prefix for output files (e.g., "train_run01", "val_run05")'
+    )
     
     args = parser.parse_args()
     
@@ -924,7 +938,8 @@ def main():
         min_attack_duration=args.min_attack_duration,
         max_attack_duration=args.max_attack_duration,
         min_clean_duration=args.min_clean_duration,
-        max_clean_duration=args.max_clean_duration
+        max_clean_duration=args.max_clean_duration,
+        label=args.label
     )
     
     try:
