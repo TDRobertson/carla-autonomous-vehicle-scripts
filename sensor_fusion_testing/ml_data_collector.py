@@ -153,7 +153,12 @@ class MLDataCollector:
         duration: float = 60.0,
         warmup_duration: float = 5.0,
         attack_start_delay: float = 10.0,
-        output_dir: str = "data"
+        output_dir: str = "data",
+        random_attacks: bool = False,
+        min_attack_duration: float = 5.0,
+        max_attack_duration: float = 15.0,
+        min_clean_duration: float = 5.0,
+        max_clean_duration: float = 15.0
     ):
         """
         Initialize the ML data collector.
@@ -162,8 +167,14 @@ class MLDataCollector:
             vehicle: CARLA vehicle actor
             duration: Total collection duration in seconds
             warmup_duration: Initial warmup period before recording (seconds)
-            attack_start_delay: Delay before starting spoofing attack (seconds)
+            attack_start_delay: Delay before starting spoofing attack (seconds).
+                               Set to 0 to start attack immediately (useful for testing).
             output_dir: Directory to save output files
+            random_attacks: If True, randomly start/stop attacks during collection
+            min_attack_duration: Minimum duration of attack periods (random mode)
+            max_attack_duration: Maximum duration of attack periods (random mode)
+            min_clean_duration: Minimum duration of clean periods (random mode)
+            max_clean_duration: Maximum duration of clean periods (random mode)
         """
         self.vehicle = vehicle
         self.world = vehicle.get_world()
@@ -171,6 +182,11 @@ class MLDataCollector:
         self.warmup_duration = warmup_duration
         self.attack_start_delay = attack_start_delay
         self.output_dir = output_dir
+        self.random_attacks = random_attacks
+        self.min_attack_duration = min_attack_duration
+        self.max_attack_duration = max_attack_duration
+        self.min_clean_duration = min_clean_duration
+        self.max_clean_duration = max_clean_duration
         
         # Timing
         self.t0: Optional[float] = None  # Simulation time origin
@@ -207,6 +223,11 @@ class MLDataCollector:
         # State tracking
         self.is_collecting = False
         self.attack_active = False
+        
+        # Random attack state tracking
+        self.next_attack_transition_time: Optional[float] = None
+        self.random_seed = int(time.time() * 1000) % 2**31
+        np.random.seed(self.random_seed)
         
         # Create output directory
         os.makedirs(self.output_dir, exist_ok=True)
@@ -298,10 +319,43 @@ class MLDataCollector:
         tf = self.vehicle.get_transform()
         true_pos = np.array([tf.location.x, tf.location.y, tf.location.z])
         
-        # Check if attack should be active based on time
-        if self.collection_start_time is not None:
-            elapsed = t - (self.collection_start_time - self.t0)
-            self.attack_active = elapsed >= self.attack_start_delay
+        # Determine attack state
+        if self.random_attacks:
+            # Random attack mode: randomly start/stop attacks
+            if self.collection_start_time is not None:
+                elapsed = t - (self.collection_start_time - self.t0)
+                
+                # Initialize first transition time
+                if self.next_attack_transition_time is None:
+                    # Start with clean period if attack_start_delay > 0
+                    if self.attack_start_delay > 0 and elapsed < self.attack_start_delay:
+                        self.attack_active = False
+                        self.next_attack_transition_time = self.attack_start_delay
+                    else:
+                        # Randomly decide to start with attack or clean
+                        self.attack_active = np.random.random() < 0.5
+                        if self.attack_active:
+                            duration = np.random.uniform(self.min_attack_duration, self.max_attack_duration)
+                        else:
+                            duration = np.random.uniform(self.min_clean_duration, self.max_clean_duration)
+                        self.next_attack_transition_time = elapsed + duration
+                
+                # Check if we need to transition
+                if elapsed >= self.next_attack_transition_time:
+                    # Toggle attack state
+                    self.attack_active = not self.attack_active
+                    
+                    # Schedule next transition
+                    if self.attack_active:
+                        duration = np.random.uniform(self.min_attack_duration, self.max_attack_duration)
+                    else:
+                        duration = np.random.uniform(self.min_clean_duration, self.max_clean_duration)
+                    self.next_attack_transition_time = elapsed + duration
+        else:
+            # Fixed attack mode: single attack period after delay
+            if self.collection_start_time is not None:
+                elapsed = t - (self.collection_start_time - self.t0)
+                self.attack_active = elapsed >= self.attack_start_delay
         
         # Apply spoofing if attack is active
         if self.attack_active:
@@ -479,7 +533,17 @@ class MLDataCollector:
         print(f"{'='*60}")
         print(f"Duration: {self.duration}s")
         print(f"Warmup: {self.warmup_duration}s")
-        print(f"Attack starts after: {self.attack_start_delay}s")
+        if self.random_attacks:
+            print(f"Attack mode: RANDOM (start/stop)")
+            print(f"  Attack duration: {self.min_attack_duration}-{self.max_attack_duration}s")
+            print(f"  Clean duration: {self.min_clean_duration}-{self.max_clean_duration}s")
+            if self.attack_start_delay > 0:
+                print(f"  Initial clean period: {self.attack_start_delay}s")
+        else:
+            print(f"Attack mode: FIXED")
+            print(f"Attack starts after: {self.attack_start_delay}s")
+            if self.attack_start_delay == 0:
+                print("  (Attack starts immediately - all data points have true/spoofed pairs)")
         print(f"Attack type: INNOVATION_AWARE_GRADUAL_DRIFT")
         print(f"{'='*60}\n")
         
@@ -511,7 +575,11 @@ class MLDataCollector:
                 points = len(self.data_points)
                 rate = points / elapsed if elapsed > 0 else 0
                 attack_status = "ACTIVE" if self.attack_active else "INACTIVE"
-                print(f"  [{elapsed:.0f}s] Collected {points} points ({rate:.1f}/s) | Attack: {attack_status}")
+                if self.random_attacks and self.next_attack_transition_time is not None:
+                    next_transition = self.next_attack_transition_time - (time.time() - start_time - self.warmup_duration)
+                    print(f"  [{elapsed:.0f}s] Collected {points} points ({rate:.1f}/s) | Attack: {attack_status} | Next transition: {next_transition:.1f}s")
+                else:
+                    print(f"  [{elapsed:.0f}s] Collected {points} points ({rate:.1f}/s) | Attack: {attack_status}")
                 last_report = current_time
                 
             time.sleep(0.05)
@@ -715,17 +783,29 @@ class MLDataCollector:
         json_filename = f"ml_training_data_{timestamp_str}.json"
         json_path = os.path.join(self.output_dir, json_filename)
         
+        metadata = {
+            'collection_timestamp': timestamp_str,
+            'duration_seconds': self.duration,
+            'warmup_seconds': self.warmup_duration,
+            'attack_start_delay_seconds': self.attack_start_delay,
+            'attack_type': 'INNOVATION_AWARE_GRADUAL_DRIFT',
+            'attack_mode': 'RANDOM' if self.random_attacks else 'FIXED',
+            'gps_rate_hz': 10,
+            'imu_rate_hz': 50,
+            'total_samples': len(df)
+        }
+        
+        if self.random_attacks:
+            metadata['random_attack_params'] = {
+                'min_attack_duration': self.min_attack_duration,
+                'max_attack_duration': self.max_attack_duration,
+                'min_clean_duration': self.min_clean_duration,
+                'max_clean_duration': self.max_clean_duration,
+                'random_seed': self.random_seed
+            }
+        
         json_data = {
-            'metadata': {
-                'collection_timestamp': timestamp_str,
-                'duration_seconds': self.duration,
-                'warmup_seconds': self.warmup_duration,
-                'attack_start_delay_seconds': self.attack_start_delay,
-                'attack_type': 'INNOVATION_AWARE_GRADUAL_DRIFT',
-                'gps_rate_hz': 10,
-                'imu_rate_hz': 50,
-                'total_samples': len(df)
-            },
+            'metadata': metadata,
             'statistics': stats,
             'feature_columns': list(df.columns),
             'raw_data': {
@@ -776,6 +856,26 @@ def main():
         '--output-dir', type=str, default='data',
         help='Output directory for data files (default: data)'
     )
+    parser.add_argument(
+        '--random-attacks', action='store_true',
+        help='Enable random start/stop attacks (more realistic training data)'
+    )
+    parser.add_argument(
+        '--min-attack-duration', type=float, default=5.0,
+        help='Minimum attack duration in random mode (default: 5.0)'
+    )
+    parser.add_argument(
+        '--max-attack-duration', type=float, default=15.0,
+        help='Maximum attack duration in random mode (default: 15.0)'
+    )
+    parser.add_argument(
+        '--min-clean-duration', type=float, default=5.0,
+        help='Minimum clean period duration in random mode (default: 5.0)'
+    )
+    parser.add_argument(
+        '--max-clean-duration', type=float, default=15.0,
+        help='Maximum clean period duration in random mode (default: 15.0)'
+    )
     
     args = parser.parse_args()
     
@@ -819,7 +919,12 @@ def main():
         duration=args.duration,
         warmup_duration=args.warmup,
         attack_start_delay=args.attack_delay,
-        output_dir=args.output_dir
+        output_dir=args.output_dir,
+        random_attacks=args.random_attacks,
+        min_attack_duration=args.min_attack_duration,
+        max_attack_duration=args.max_attack_duration,
+        min_clean_duration=args.min_clean_duration,
+        max_clean_duration=args.max_clean_duration
     )
     
     try:

@@ -183,7 +183,9 @@ See [../analysis.md](../analysis.md) for a detailed summary of the research goal
 
 4. **Why Dual Kalman Filters?** Running separate KF instances for true and spoofed paths allows direct comparison of filter behavior. The innovation values from the spoofed KF path are key features for anomaly detection.
 
-5. **Why Separate Clean/Attack Periods?** The configurable `attack_start_delay` allows collection of clean baseline data before spoofing begins. This is essential for one-class classifiers that train only on clean data.
+5. **Why Separate Clean/Attack Periods?** The configurable `attack_start_delay` allows collection of clean baseline data before spoofing begins. This is essential for one-class classifiers that train only on clean data. Setting `attack_delay=0` starts the attack immediately, ensuring every data point has a corresponding true/spoofed pair (useful for testing and supervised learning).
+
+6. **Why Random Attack Mode?** Real-world attacks don't start at predictable times. Random start/stop attacks create more realistic training data and help ML models learn to detect attacks regardless of when they occur, improving generalization.
 
 **Data Schema** (per timestamp):
 
@@ -244,8 +246,20 @@ SE_i = (x_true - x_spoof)^2 + (y_true - y_spoof)^2 + (z_true - z_spoof)^2
 # Collect synchronized GPS/IMU data for ML training (default: 60s, outputs to data/)
 python ml_data_collector.py
 
+# Start attack immediately (attack_delay=0) - useful for testing
+# Every data point will have true/spoofed pairs from the start
+python ml_data_collector.py --attack-delay 0
+
 # Custom duration and timing
 python ml_data_collector.py --duration 120 --warmup 10 --attack-delay 20
+
+# Random attack mode - attacks randomly start/stop
+python ml_data_collector.py --random-attacks --duration 120
+
+# Random attacks with custom intervals
+python ml_data_collector.py --random-attacks \
+  --min-attack-duration 5 --max-attack-duration 20 \
+  --min-clean-duration 5 --max-clean-duration 15
 
 # Specify output directory
 python ml_data_collector.py --duration 90 --output-dir my_experiment_data
@@ -256,22 +270,48 @@ python ml_data_collector.py --duration 90 --output-dir my_experiment_data
 - `--duration`: Total collection time in seconds (default: 60)
 - `--warmup`: Initial warmup before recording starts (default: 5)
 - `--attack-delay`: Seconds of clean data before spoofing begins (default: 10)
+  - Set to `0` to start attack immediately - ensures every data point has true/spoofed pairs
+  - Useful for testing and supervised learning scenarios
 - `--output-dir`: Directory for output files (default: data)
+- `--random-attacks`: Enable random start/stop attacks (default: False)
+  - Creates more realistic training data with unpredictable attack timing
+  - Attacks randomly start and stop throughout collection period
+- `--min-attack-duration`: Minimum attack duration in random mode (default: 5.0)
+- `--max-attack-duration`: Maximum attack duration in random mode (default: 15.0)
+- `--min-clean-duration`: Minimum clean period duration in random mode (default: 5.0)
+- `--max-clean-duration`: Maximum clean period duration in random mode (default: 15.0)
 
-**Example workflow for ML training**:
+**Example workflows for ML training**:
+
+**For One-Class Classifiers** (train on clean data only):
 
 ```bash
 # 1. Start CARLA simulator (CarlaUE4.exe)
 
-# 2. Collect training data (clean + attack periods)
+# 2. Collect data with clean baseline period
 python ml_data_collector.py --duration 120 --attack-delay 30
 
-# 3. Load the CSV into pandas for ML
+# 3. Load and filter to clean data only
 import pandas as pd
 df = pd.read_csv('data/ml_training_data_YYYYMMDD_HHMMSS.csv')
+clean_data = df[df['is_attack_active'] == 0]  # Use for training
+attack_data = df[df['is_attack_active'] == 1]  # Use for testing
+```
 
-# 4. For one-class classifiers, filter to clean data only
-clean_data = df[df['is_attack_active'] == 0]
+**For Testing/Validation** (all data points have true/spoofed pairs):
+
+```bash
+# Start attack immediately - every point has both true and spoofed values
+python ml_data_collector.py --attack-delay 0 --duration 60
+```
+
+**For Realistic Training** (random attack timing):
+
+```bash
+# Random attacks create unpredictable timing - better generalization
+python ml_data_collector.py --random-attacks --duration 180 \
+  --min-attack-duration 5 --max-attack-duration 20 \
+  --min-clean-duration 5 --max-clean-duration 15
 ```
 
 ### Complete Pipeline Testing
