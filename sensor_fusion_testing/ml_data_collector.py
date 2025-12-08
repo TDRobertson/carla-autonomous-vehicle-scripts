@@ -193,7 +193,8 @@ class MLDataCollector:
         
         # Timing
         self.t0: Optional[float] = None  # Simulation time origin
-        self.collection_start_time: Optional[float] = None
+        self.collection_start_time: Optional[float] = None  # Wall clock time when collection starts
+        self.collection_start_sim_time: Optional[float] = None  # CARLA simulation time when collection starts
         
         # Sensors
         self.gps_sensor_true: Optional[carla.Actor] = None
@@ -286,6 +287,10 @@ class MLDataCollector:
         
         if not self.is_collecting:
             return
+        
+        # Set collection start time on first collected sample
+        if self.collection_start_sim_time is None:
+            self.collection_start_sim_time = data.timestamp - self.t0
             
         t = data.timestamp - self.t0
         
@@ -315,6 +320,10 @@ class MLDataCollector:
         
         if not self.is_collecting:
             return
+        
+        # Set collection start time on first collected sample
+        if self.collection_start_sim_time is None:
+            self.collection_start_sim_time = data.timestamp - self.t0
             
         t = data.timestamp - self.t0
         
@@ -325,8 +334,8 @@ class MLDataCollector:
         # Determine attack state
         if self.random_attacks:
             # Random attack mode: randomly start/stop attacks
-            if self.collection_start_time is not None:
-                elapsed = t - (self.collection_start_time - self.t0)
+            if self.collection_start_sim_time is not None:
+                elapsed = t - self.collection_start_sim_time
                 
                 # Initialize first transition time
                 if self.next_attack_transition_time is None:
@@ -356,8 +365,8 @@ class MLDataCollector:
                     self.next_attack_transition_time = elapsed + duration
         else:
             # Fixed attack mode: single attack period after delay
-            if self.collection_start_time is not None:
-                elapsed = t - (self.collection_start_time - self.t0)
+            if self.collection_start_sim_time is not None:
+                elapsed = t - self.collection_start_sim_time
                 self.attack_active = elapsed >= self.attack_start_delay
         
         # Apply spoofing if attack is active
