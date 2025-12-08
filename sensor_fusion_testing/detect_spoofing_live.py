@@ -16,6 +16,7 @@ import time
 import argparse
 import numpy as np
 from datetime import datetime
+from typing import Optional, Dict, List
 
 # Add CARLA to path
 try:

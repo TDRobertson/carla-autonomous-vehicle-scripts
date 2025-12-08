@@ -421,6 +421,76 @@ python ml_data_collector.py --random-attacks --duration 180 \
   --label realistic_run01
 ```
 
+### ML Model Training and Testing
+
+After collecting data, train machine learning models to detect GPS spoofing attacks.
+
+**Quick Start:**
+
+```bash
+# 1. Collect training data (25 runs, 120s each, clean baseline)
+cd sensor_fusion_testing
+collect_ml_datasets.bat  # Select Option 2: One-Class Training
+
+# 2. Collect validation data (5 runs, 180s each, random attacks)
+collect_ml_datasets.bat  # Select Option 3: One-Class Validation
+
+# 3. Train all models (Isolation Forest, One-Class SVM, LOF, Elliptic Envelope)
+python train_models.py --train-dir data/training --val-dir data/validation
+
+# 4. Test with live detection in CARLA
+python detect_spoofing_live.py --model-dir trained_models --duration 600
+```
+
+**Training Output:**
+
+```
+trained_models/
+├── isolation_forest.pkl      # Tree-based isolation
+├── one_class_svm.pkl         # Kernel-based boundary
+├── lof.pkl                   # Local density comparison
+├── elliptic_envelope.pkl     # Gaussian distribution
+├── ensemble.pkl              # Combined voting system
+└── scaler.pkl               # Feature normalization
+
+results/
+├── model_comparison.png         # Performance comparison
+├── confusion_matrices.png       # TP/FP/TN/FN visualization
+├── roc_curves.png              # ROC curves
+├── precision_recall_curves.png  # PR curves
+└── performance_report.json     # Detailed metrics
+```
+
+**Testing Options:**
+
+```bash
+# Option 1: Live real-time detection with CARLA
+python detect_spoofing_live.py --model-dir trained_models --duration 60
+
+# Option 2: Evaluate on new test data
+python ml_data_collector.py --attack-delay 0 --duration 60 --label new_test
+# Then load models and evaluate in Python
+
+# Option 3: Quick evaluation on existing data
+python train_models.py --train-dir data/training --val-dir data/test --skip-save
+```
+
+**Model Selection Guide:**
+
+| Use Case                | Recommended Model            | Why                                           |
+| ----------------------- | ---------------------------- | --------------------------------------------- |
+| Production deployment   | Ensemble (confidence voting) | Best balance: high F1, lowest false positives |
+| Fast inference          | Isolation Forest             | Fastest predictions (~0.001s per sample)      |
+| Best overall accuracy   | One-Class SVM                | Highest F1-score, configurable boundary       |
+| Detecting gradual drift | LOF                          | Compares local density, catches slow changes  |
+| Research/prototyping    | Train all, compare           | Understand strengths/weaknesses               |
+
+**For detailed information, see:**
+
+- `ML_TRAINING_GUIDE.md` - Complete training workflow and model details
+- `ml_models/README.md` - Package documentation and API reference
+- `AUTOMATION_GUIDE.md` - Data collection automation strategies
+
 ### Complete Pipeline Testing
 
 ```bash
