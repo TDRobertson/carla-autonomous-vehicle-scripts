@@ -425,6 +425,57 @@ python ml_data_collector.py --random-attacks --duration 180 \
 
 After collecting data, train machine learning models to detect GPS spoofing attacks.
 
+**Two Training Approaches:**
+
+| Approach                       | Script                           | Description                                                           |
+| ------------------------------ | -------------------------------- | --------------------------------------------------------------------- |
+| **Unsupervised (Recommended)** | `train_unsupervised_ensemble.py` | Pure unsupervised - no attack labels used for training or calibration |
+| Supervised                     | `train_models.py`                | Original approach - uses validation attack labels for weighting       |
+
+#### Unsupervised Ensemble
+
+The unsupervised approach trains only on clean data and calibrates thresholds from clean score percentiles no attack labels are used.
+
+```bash
+# 1. Collect training data
+cd sensor_fusion_testing
+collect_ml_datasets.bat  # Select Option 2: One-Class Training
+
+# 2. Collect validation data
+collect_ml_datasets.bat  # Select Option 3: One-Class Validation
+
+# 3. Train unsupervised ensemble (IsolationForest + PCA + LOF)
+python train_unsupervised_ensemble.py --train-dir data/training --val-dir data/validation
+
+# 4. Test with live detection in CARLA
+python detect_spoofing_live.py --mode unsupervised --duration 120
+```
+
+**Unsupervised Training Output:**
+
+```
+trained_models_unsupervised/
+|-- iforest.pkl           # IsolationForest with calibrated threshold
+|-- pca.pkl               # PCA reconstruction error model
+|-- lof.pkl               # Local Outlier Factor model
+|-- unsup_ensemble.pkl    # Ensemble configuration (voting + smoothing)
+|-- scaler.pkl            # Feature normalization
+|-- config.json           # Training config and evaluation metrics
+```
+
+**Key Parameters:**
+
+```bash
+# Control false positive rate (default: 2%)
+python train_unsupervised_ensemble.py --target-fpr 1.0  # Stricter (fewer FPs)
+python train_unsupervised_ensemble.py --target-fpr 5.0  # More sensitive
+
+# Temporal smoothing (reduces transient false positives)
+python train_unsupervised_ensemble.py --smoothing-window 5 --smoothing-required 3
+```
+
+#### Supervised Ensemble (Original)
+
 **Quick Start:**
 
 ```bash
@@ -439,7 +490,7 @@ collect_ml_datasets.bat  # Select Option 3: One-Class Validation
 python train_models.py --train-dir data/training --val-dir data/validation
 
 # 4. Test with live detection in CARLA
-python detect_spoofing_live.py --model-dir trained_models --duration 600
+python detect_spoofing_live.py --mode supervised --model-dir trained_models --duration 600
 ```
 
 **Training Output:**
@@ -464,16 +515,30 @@ results/
 **Testing Options:**
 
 ```bash
-# Option 1: Live real-time detection with CARLA
-python detect_spoofing_live.py --model-dir trained_models --duration 60
+# Option 1: Live real-time detection with unsupervised ensemble (recommended)
+python detect_spoofing_live.py --mode unsupervised --duration 120
 
-# Option 2: Evaluate on new test data
+# Option 2: Live detection with supervised ensemble
+python detect_spoofing_live.py --mode supervised --model-dir trained_models --duration 60
+
+# Option 3: Evaluate on new test data
 python ml_data_collector.py --attack-delay 0 --duration 60 --label new_test
 # Then load models and evaluate in Python
 
-# Option 3: Quick evaluation on existing data
+# Option 4: Quick evaluation on existing data
 python train_models.py --train-dir data/training --val-dir data/test --skip-save
 ```
+
+**Live Detection Options:**
+
+| Flag                  | Description                                    |
+| --------------------- | ---------------------------------------------- |
+| `--mode unsupervised` | Use unsupervised ensemble (default)            |
+| `--mode supervised`   | Use original supervised ensemble               |
+| `--duration N`        | Run for N seconds                              |
+| `--attack-delay N`    | Seconds of clean baseline before attack        |
+| `--no-smoothing`      | Disable temporal smoothing (unsupervised only) |
+| `--no-display`        | Console output only (no pygame window)         |
 
 **Model Selection Guide:**
 
