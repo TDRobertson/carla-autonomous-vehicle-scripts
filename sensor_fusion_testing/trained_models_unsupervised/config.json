@@ -1,0 +1,35 @@
+{
+  "training_timestamp": "2025-12-16T22:04:17.640653",
+  "target_fpr": 2.0,
+  "calibration_split": 0.2,
+  "model_config": {
+    "if_n_estimators": 200,
+    "pca_n_components": 0.95,
+    "lof_n_neighbors": 20,
+    "random_state": 42
+  },
+  "ensemble_config": {
+    "voting_threshold": 0.5,
+    "smoothing_window": 3,
+    "smoothing_required": 2
+  },
+  "thresholds": {
+    "iforest": -0.06340664256935036,
+    "pca": -0.12389191082895906,
+    "lof": 0.05222781035412116
+  },
+  "evaluation": {
+    "accuracy": 0.9228035099411307,
+    "precision": 0.8987043580683156,
+    "recall": 0.962371242379651,
+    "f1_score": 0.9294487869251853,
+    "false_positive_rate": 0.12152614225153086,
+    "detection_rate": 0.962371242379651,
+    "n_clean": 4246,
+    "n_attack": 4757,
+    "true_positives": 4578,
+    "false_positives": 516,
+    "true_negatives": 3730,
+    "false_negatives": 179
+  }
+}

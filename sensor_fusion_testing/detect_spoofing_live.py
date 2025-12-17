@@ -5,8 +5,16 @@ Real-Time GPS Spoofing Detection Demo
 Tests trained ML models by applying GPS spoofing attacks and detecting them
 in real-time within the CARLA simulator.
 
+Supports two detection modes:
+    - supervised: Uses original one-class classifiers (trained_models/)
+    - unsupervised: Uses pure unsupervised ensemble (trained_models_unsupervised/)
+
 Usage:
-    python detect_spoofing_live.py [--model-dir trained_models] [--duration 60] [--no-display]
+    # Supervised mode (original)
+    python detect_spoofing_live.py --mode supervised --model-dir trained_models
+    
+    # Unsupervised mode (new - pure unsupervised, no attack labels used)
+    python detect_spoofing_live.py --mode unsupervised --model-dir trained_models_unsupervised
 """
 
 import sys
@@ -42,7 +50,6 @@ import carla
 sys.path.insert(0, os.path.dirname(__file__))
 from integration_files.gps_spoofer import GPSSpoofer, SpoofingStrategy
 from integration_files.advanced_kalman_filter import AdvancedKalmanFilter
-from ml_models.ensemble import EnsembleVoting
 import joblib
 
 # Try to import pygame for visualization
@@ -56,31 +63,36 @@ except ImportError:
 class LiveSpoofingDetector:
     """
     Real-time GPS spoofing detection using trained ML models.
+    
+    Supports both supervised (original) and unsupervised (new) detection modes.
     """
     
     def __init__(
         self,
         model_dir: str = "trained_models",
+        mode: str = "unsupervised",
         enable_display: bool = True,
-        attack_start_delay: float = 10.0
+        attack_start_delay: float = 10.0,
+        use_smoothing: bool = True
     ):
         """
         Initialize the live detector.
         
         Args:
             model_dir: Directory containing trained models
+            mode: Detection mode - 'supervised' or 'unsupervised'
             enable_display: Enable pygame visualization
             attack_start_delay: Seconds before starting attack (allows baseline)
+            use_smoothing: Use temporal smoothing for unsupervised mode
         """
         self.model_dir = model_dir
+        self.mode = mode.lower()
         self.enable_display = enable_display and HAS_PYGAME
         self.attack_start_delay = attack_start_delay
+        self.use_smoothing = use_smoothing
         
-        # Load trained models
-        print(f"[INFO] Loading models from {model_dir}...")
-        self.ensemble = EnsembleVoting.load(os.path.join(model_dir, 'ensemble.pkl'))
-        self.scaler = joblib.load(os.path.join(model_dir, 'scaler.pkl'))
-        print(f"[INFO] Loaded ensemble with {len(self.ensemble.models)} models")
+        # Load appropriate models based on mode
+        self._load_models()
         
         # CARLA connection
         self.client = None
@@ -124,11 +136,53 @@ class LiveSpoofingDetector:
         if self.enable_display:
             pygame.init()
             self.screen = pygame.display.set_mode((800, 600))
-            pygame.display.set_caption("GPS Spoofing Detection - Live Demo")
+            mode_str = "Unsupervised" if self.mode == "unsupervised" else "Supervised"
+            pygame.display.set_caption(f"GPS Spoofing Detection - {mode_str} Mode")
             self.font = pygame.font.Font(None, 48)
             self.small_font = pygame.font.Font(None, 24)
             self.clock = pygame.time.Clock()
             self.alert_active = False
+            
+    def _load_models(self):
+        """Load models based on detection mode."""
+        print(f"\n[INFO] Loading models in {self.mode.upper()} mode from {self.model_dir}...")
+        
+        if self.mode == "unsupervised":
+            # Load unsupervised ensemble
+            from ml_models.unsupervised_ensemble import UnsupervisedEnsemble
+            
+            ensemble_path = os.path.join(self.model_dir, 'unsup_ensemble.pkl')
+            if not os.path.exists(ensemble_path):
+                raise FileNotFoundError(
+                    f"Unsupervised ensemble not found at {ensemble_path}. "
+                    f"Run train_unsupervised_ensemble.py first."
+                )
+                
+            self.ensemble = UnsupervisedEnsemble.load(ensemble_path)
+            self.scaler = joblib.load(os.path.join(self.model_dir, 'scaler.pkl'))
+            
+            summary = self.ensemble.get_summary()
+            print(f"[INFO] Loaded unsupervised ensemble:")
+            print(f"       Models: {summary['model_names']}")
+            print(f"       Voting: {summary['voting_threshold']} (majority)")
+            print(f"       Smoothing: {summary['smoothing_required']}/{summary['smoothing_window']}")
+            for name, thresh in summary['thresholds'].items():
+                print(f"       {name} threshold: {thresh:.4f}")
+                
+        else:
+            # Load supervised ensemble (original)
+            from ml_models.ensemble import EnsembleVoting
+            
+            ensemble_path = os.path.join(self.model_dir, 'ensemble.pkl')
+            if not os.path.exists(ensemble_path):
+                raise FileNotFoundError(
+                    f"Supervised ensemble not found at {ensemble_path}. "
+                    f"Run train_models.py first."
+                )
+                
+            self.ensemble = EnsembleVoting.load(ensemble_path)
+            self.scaler = joblib.load(os.path.join(self.model_dir, 'scaler.pkl'))
+            print(f"[INFO] Loaded supervised ensemble with {len(self.ensemble.models)} models")
         
     def connect_to_carla(self, host: str = 'localhost', port: int = 2000):
         """Connect to CARLA and spawn vehicle."""
@@ -354,20 +408,27 @@ class LiveSpoofingDetector:
         # Normalize features
         features_scaled = self.scaler.transform(features.reshape(1, -1))
         
-        # Get prediction from ensemble
-        prediction = self.ensemble.predict(features_scaled)[0]
-        
-        # Get individual model predictions
-        individual_preds = self.ensemble.get_individual_predictions(features_scaled)
-        
-        # Get anomaly scores
-        scores = {}
-        for name, model in self.ensemble.models.items():
-            score = model.score_samples(features_scaled)[0]
-            scores[name] = score
-        
-        # Is attack detected?
-        is_attack_detected = prediction == -1
+        # Get detection based on mode
+        if self.mode == "unsupervised":
+            is_attack_detected, info = self.ensemble.predict_single(
+                features_scaled[0],
+                use_smoothing=self.use_smoothing
+            )
+            individual_preds = info['votes']
+            scores = info['scores']
+        else:
+            # Supervised mode
+            prediction = self.ensemble.predict(features_scaled)[0]
+            is_attack_detected = prediction == -1
+            individual_preds = {}
+            scores = {}
+            for name, model in self.ensemble.models.items():
+                pred = model.predict(features_scaled)[0]
+                individual_preds[name] = pred == -1
+                try:
+                    scores[name] = model.score_samples(features_scaled)[0]
+                except Exception:
+                    scores[name] = 0.0
         
         # Get current state
         current_data = self.data_buffer[-1]
@@ -511,41 +572,52 @@ class LiveSpoofingDetector:
     ):
         """Print detection result to console."""
         print("\n" + "="*70)
-        print(f"DETECTION at t={timestamp:.2f}s")
+        mode_str = "UNSUPERVISED" if self.mode == "unsupervised" else "SUPERVISED"
+        print(f"DETECTION [{mode_str}] at t={timestamp:.2f}s")
         print("="*70)
         
         # Detection status
         if detected:
             if actual_attack:
-                status = "CORRECTLY DETECTED"
-                symbol = "✓"
+                status = "TRUE POSITIVE (Attack Detected)"
+                symbol = "[TP]"
             else:
-                status = "FALSE ALARM"
-                symbol = "✗"
+                status = "FALSE POSITIVE (False Alarm)"
+                symbol = "[FP]"
         else:
             if actual_attack:
-                status = "MISSED ATTACK"
-                symbol = "✗"
+                status = "FALSE NEGATIVE (Missed Attack)"
+                symbol = "[FN]"
             else:
-                status = "CORRECTLY CLEAN"
-                symbol = "✓"
+                status = "TRUE NEGATIVE (Correctly Clean)"
+                symbol = "[TN]"
                 
-        print(f"Status: {status} {symbol}")
-        print(f"Ensemble Decision: {'SPOOFED DETECTED!' if detected else 'CLEAN'}")
-        print(f"Ground Truth: {'Attack Active' if actual_attack else 'Clean Data'}")
+        print(f"Result: {symbol} {status}")
+        print(f"Detection: {'SPOOFING DETECTED!' if detected else 'CLEAN'}")
+        print(f"Ground Truth: {'ATTACK ACTIVE' if actual_attack else 'CLEAN DATA'}")
         
         # Key metrics
-        print(f"\nKey Metrics:")
+        print(f"\nSensor Metrics:")
         print(f"  Position Error: {data['position_error']:.3f}m")
         print(f"  Innovation (Spoof): {data['innovation_spoof']:.3f}")
         print(f"  KF Tracking Error: {data['kf_tracking_error']:.3f}m")
         
-        # Individual model predictions
-        print(f"\nIndividual Models:")
-        for name, pred in individual_preds.items():
-            pred_str = "SPOOFED" if pred == -1 else "CLEAN"
-            score = scores.get(name, 0.0)
-            print(f"  {name:20s}: {pred_str:8s} (score: {score:+.3f})")
+        # Individual model votes
+        print(f"\nModel Votes:")
+        for name, vote in individual_preds.items():
+            if self.mode == "unsupervised":
+                # Unsupervised: vote is boolean
+                vote_str = "ANOMALY" if vote else "NORMAL"
+                score = scores.get(name, 0.0)
+                # Get threshold from ensemble
+                thresh = self.ensemble.models[name].threshold
+                print(f"  {name:15s}: {vote_str:8s} (score: {score:+.4f}, thresh: {thresh:+.4f})")
+            else:
+                # Supervised: vote is boolean or -1/1
+                vote_val = vote if isinstance(vote, bool) else (vote == -1)
+                vote_str = "ANOMALY" if vote_val else "NORMAL"
+                score = scores.get(name, 0.0)
+                print(f"  {name:15s}: {vote_str:8s} (score: {score:+.4f})")
             
         print("="*70)
         
@@ -557,7 +629,8 @@ class LiveSpoofingDetector:
         self.screen.fill((20, 20, 30))  # Dark background
         
         # Title
-        title = self.font.render("GPS Spoofing Detection", True, (255, 255, 255))
+        mode_str = "Unsupervised" if self.mode == "unsupervised" else "Supervised"
+        title = self.font.render(f"GPS Spoofing Detection ({mode_str})", True, (255, 255, 255))
         self.screen.blit(title, (20, 20))
         
         # Status
@@ -592,16 +665,16 @@ class LiveSpoofingDetector:
             actual = detection['actual_attack']
             
             if detected and actual:
-                text = f"  {t:.1f}s: DETECTED (Correct)"
+                text = f"  {t:.1f}s: TP - Detected (Correct)"
                 color = (100, 255, 100)
             elif detected and not actual:
-                text = f"  {t:.1f}s: DETECTED (False Alarm)"
+                text = f"  {t:.1f}s: FP - False Alarm"
                 color = (255, 200, 100)
             elif not detected and actual:
-                text = f"  {t:.1f}s: MISSED"
+                text = f"  {t:.1f}s: FN - Missed"
                 color = (255, 100, 100)
             else:
-                text = f"  {t:.1f}s: Clean (Correct)"
+                text = f"  {t:.1f}s: TN - Clean (Correct)"
                 color = (150, 150, 150)
                 
             line = self.small_font.render(text, True, color)
@@ -617,13 +690,20 @@ class LiveSpoofingDetector:
         Args:
             duration: Demo duration in seconds
         """
+        mode_str = "UNSUPERVISED" if self.mode == "unsupervised" else "SUPERVISED"
+        
         print("\n" + "="*70)
-        print("LIVE GPS SPOOFING DETECTION DEMO")
+        print(f"LIVE GPS SPOOFING DETECTION DEMO - {mode_str} MODE")
         print("="*70)
         print(f"Duration: {duration}s")
         print(f"Attack delay: {self.attack_start_delay}s")
         print(f"Attack type: INNOVATION_AWARE_GRADUAL_DRIFT")
-        print(f"Loaded models: {len(self.ensemble.models)}")
+        if self.mode == "unsupervised":
+            print(f"Temporal smoothing: {'Enabled' if self.use_smoothing else 'Disabled'}")
+            summary = self.ensemble.get_summary()
+            print(f"Models: {summary['model_names']}")
+        else:
+            print(f"Models: {len(self.ensemble.models)}")
         print("="*70 + "\n")
         
         # Setup sensors
@@ -653,7 +733,7 @@ class LiveSpoofingDetector:
             
         # Print summary
         print("\n" + "="*70)
-        print("DEMO COMPLETE - SUMMARY")
+        print(f"DEMO COMPLETE - SUMMARY ({mode_str} MODE)")
         print("="*70)
         print(f"Total runtime: {time.time() - start_time:.1f}s")
         print(f"Total detections: {self.detection_count}")
@@ -674,19 +754,26 @@ class LiveSpoofingDetector:
             false_negatives = sum(1 for d in self.detection_history 
                                  if not d['detected'] and d['actual_attack'])
             
-            print(f"\nAccuracy: {accuracy:.1f}%")
-            print(f"True Positives: {true_positives}")
-            print(f"False Positives: {false_positives}")
-            print(f"True Negatives: {true_negatives}")
-            print(f"False Negatives: {false_negatives}")
+            print(f"\nConfusion Matrix:")
+            print(f"  True Positives (TP):  {true_positives}")
+            print(f"  False Positives (FP): {false_positives}")
+            print(f"  True Negatives (TN):  {true_negatives}")
+            print(f"  False Negatives (FN): {false_negatives}")
+            
+            print(f"\nMetrics:")
+            print(f"  Accuracy: {accuracy:.1f}%")
             
             if true_positives + false_negatives > 0:
                 recall = true_positives / (true_positives + false_negatives) * 100
-                print(f"Detection Rate (Recall): {recall:.1f}%")
+                print(f"  Detection Rate (Recall): {recall:.1f}%")
                 
             if true_positives + false_positives > 0:
                 precision = true_positives / (true_positives + false_positives) * 100
-                print(f"Precision: {precision:.1f}%")
+                print(f"  Precision: {precision:.1f}%")
+                
+            if true_negatives + false_positives > 0:
+                fpr = false_positives / (true_negatives + false_positives) * 100
+                print(f"  False Positive Rate: {fpr:.1f}%")
         
         print("="*70 + "\n")
         
@@ -709,10 +796,17 @@ def main():
         description="Live GPS spoofing detection demo"
     )
     parser.add_argument(
+        '--mode',
+        type=str,
+        choices=['supervised', 'unsupervised'],
+        default='unsupervised',
+        help='Detection mode: supervised (original) or unsupervised (new, default)'
+    )
+    parser.add_argument(
         '--model-dir',
         type=str,
-        default='trained_models',
-        help='Directory containing trained models (default: trained_models)'
+        default=None,
+        help='Directory containing trained models (default: auto-select based on mode)'
     )
     parser.add_argument(
         '--duration',
@@ -732,6 +826,11 @@ def main():
         help='Disable pygame visualization'
     )
     parser.add_argument(
+        '--no-smoothing',
+        action='store_true',
+        help='Disable temporal smoothing for unsupervised mode'
+    )
+    parser.add_argument(
         '--host',
         type=str,
         default='localhost',
@@ -746,11 +845,20 @@ def main():
     
     args = parser.parse_args()
     
+    # Auto-select model directory based on mode if not specified
+    if args.model_dir is None:
+        if args.mode == 'unsupervised':
+            args.model_dir = 'trained_models_unsupervised'
+        else:
+            args.model_dir = 'trained_models'
+    
     # Create detector
     detector = LiveSpoofingDetector(
         model_dir=args.model_dir,
+        mode=args.mode,
         enable_display=not args.no_display,
-        attack_start_delay=args.attack_delay
+        attack_start_delay=args.attack_delay,
+        use_smoothing=not args.no_smoothing
     )
     
     try:
