@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 """
-Real-Time GPS Spoofing Detection Demo
+Real-Time GPS Spoofing Detection
 
-Tests trained ML models by applying GPS spoofing attacks and detecting them
-in real-time within the CARLA simulator.
+Runs trained ML models to detect GPS spoofing attacks in real-time within the
+CARLA simulator. Applies spoofing attacks and evaluates detection performance.
 
 Supports two detection modes:
     - supervised: Uses original one-class classifiers (trained_models/)
     - unsupervised: Uses pure unsupervised ensemble (trained_models_unsupervised/)
 
 Usage:
+    # Unsupervised mode (default - pure unsupervised, no attack labels used)
+    python detect_spoofing_live.py --mode unsupervised --duration 120
+    
     # Supervised mode (original)
     python detect_spoofing_live.py --mode supervised --model-dir trained_models
-    
-    # Unsupervised mode (new - pure unsupervised, no attack labels used)
-    python detect_spoofing_live.py --mode unsupervised --model-dir trained_models_unsupervised
 """
 
 import sys
@@ -464,8 +464,15 @@ class LiveSpoofingDetector:
         """
         Calculate features from buffered data (same as training).
         
+        Must match PRIMARY_FEATURES from data_loader.py exactly:
+            'innovation_spoof', 'innovation_spoof_ma', 'innovation_spoof_std',
+            'innovation_spoof_max', 'position_error', 'kf_tracking_error',
+            'accel_magnitude', 'gyro_magnitude', 'jerk_magnitude',
+            'position_error_ma', 'position_error_std', 'kf_tracking_error_ma',
+            'kf_tracking_error_std', 'innovation_diff', 'kf_diff_magnitude'
+        
         Returns:
-            Feature vector matching training data format
+            Feature vector matching training data format (15 features)
         """
         if len(self.data_buffer) < 10:
             return None
@@ -508,11 +515,6 @@ class LiveSpoofingDetector:
         innovations_spoof = [d['innovation_spoof'] for d in data_list]
         position_errors = [d['position_error'] for d in data_list]
         kf_tracking_errors = [d['kf_tracking_error'] for d in data_list]
-        accel_mags = []
-        
-        for d in data_list:
-            am = np.sqrt(d['imu_accel_x']**2 + d['imu_accel_y']**2 + d['imu_accel_z']**2)
-            accel_mags.append(am)
         
         # Rolling statistics
         innovation_spoof_ma = np.mean(innovations_spoof)
@@ -525,9 +527,6 @@ class LiveSpoofingDetector:
         kf_tracking_error_ma = np.mean(kf_tracking_errors)
         kf_tracking_error_std = np.std(kf_tracking_errors)
         
-        accel_magnitude_ma = np.mean(accel_mags)
-        accel_magnitude_std = np.std(accel_mags)
-        
         # Innovation difference
         innovation_diff = current['innovation_spoof'] - current['innovation_true']
         
@@ -538,25 +537,23 @@ class LiveSpoofingDetector:
             (current['kf_spoof_z'] - current['kf_true_z'])**2
         )
         
-        # Feature vector (must match training feature order)
+        # Feature vector - MUST match PRIMARY_FEATURES order from data_loader.py (15 features)
         features = np.array([
-            current['innovation_spoof'],
-            innovation_spoof_ma,
-            innovation_spoof_std,
-            innovation_spoof_max,
-            current['position_error'],
-            position_error_ma,
-            position_error_std,
-            current['kf_tracking_error'],
-            kf_tracking_error_ma,
-            kf_tracking_error_std,
-            accel_magnitude,
-            accel_magnitude_ma,
-            accel_magnitude_std,
-            gyro_magnitude,
-            jerk_magnitude,
-            innovation_diff,
-            kf_diff_magnitude
+            current['innovation_spoof'],      # 1
+            innovation_spoof_ma,              # 2
+            innovation_spoof_std,             # 3
+            innovation_spoof_max,             # 4
+            current['position_error'],        # 5
+            current['kf_tracking_error'],     # 6
+            accel_magnitude,                  # 7
+            gyro_magnitude,                   # 8
+            jerk_magnitude,                   # 9
+            position_error_ma,                # 10
+            position_error_std,               # 11
+            kf_tracking_error_ma,             # 12
+            kf_tracking_error_std,            # 13
+            innovation_diff,                  # 14
+            kf_diff_magnitude                 # 15
         ])
         
         return features
