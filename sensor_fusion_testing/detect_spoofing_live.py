@@ -9,12 +9,23 @@ Supports two detection modes:
     - supervised: Uses original one-class classifiers (trained_models/)
     - unsupervised: Uses pure unsupervised ensemble (trained_models_unsupervised/)
 
+Supports chaotic attack scheduling:
+    - Random on/off attack windows with configurable durations
+    - Strength modulation during attacks
+    - Full logging to CSV + JSON summary
+
 Usage:
-    # Unsupervised mode (default - pure unsupervised, no attack labels used)
+    # Basic unsupervised mode (default)
     python detect_spoofing_live.py --mode unsupervised --duration 120
     
-    # Supervised mode (original)
-    python detect_spoofing_live.py --mode supervised --model-dir trained_models
+    # Chaotic mode with random attack scheduling
+    python detect_spoofing_live.py --chaotic --duration 300
+    
+    # Chaotic mode with custom parameters
+    python detect_spoofing_live.py --chaotic --min-attack 15 --max-attack 60 --seed 42
+    
+    # With logging output
+    python detect_spoofing_live.py --chaotic --output-dir results/live_runs --run-label test1
 """
 
 import sys
@@ -22,6 +33,8 @@ import os
 import glob
 import time
 import argparse
+import json
+import csv
 import numpy as np
 from datetime import datetime
 from typing import Optional, Dict, List
@@ -65,6 +78,7 @@ class LiveSpoofingDetector:
     Real-time GPS spoofing detection using trained ML models.
     
     Supports both supervised (original) and unsupervised (new) detection modes.
+    Supports chaotic attack scheduling with random on/off windows and strength modulation.
     """
     
     def __init__(
@@ -73,7 +87,20 @@ class LiveSpoofingDetector:
         mode: str = "unsupervised",
         enable_display: bool = True,
         attack_start_delay: float = 10.0,
-        use_smoothing: bool = True
+        use_smoothing: bool = True,
+        # Chaotic mode parameters
+        chaotic_mode: bool = False,
+        min_clean_s: float = 5.0,
+        max_clean_s: float = 20.0,
+        min_attack_s: float = 10.0,
+        max_attack_s: float = 40.0,
+        strength_min: float = 0.3,
+        strength_max: float = 1.5,
+        strength_hold_s: float = 5.0,
+        chaos_seed: Optional[int] = None,
+        # Logging parameters
+        output_dir: Optional[str] = None,
+        run_label: str = "run"
     ):
         """
         Initialize the live detector.
@@ -84,12 +111,39 @@ class LiveSpoofingDetector:
             enable_display: Enable pygame visualization
             attack_start_delay: Seconds before starting attack (allows baseline)
             use_smoothing: Use temporal smoothing for unsupervised mode
+            chaotic_mode: Enable chaotic attack scheduling
+            min_clean_s: Minimum duration of clean (no attack) windows
+            max_clean_s: Maximum duration of clean windows
+            min_attack_s: Minimum duration of attack windows
+            max_attack_s: Maximum duration of attack windows
+            strength_min: Minimum strength multiplier during attacks
+            strength_max: Maximum strength multiplier during attacks
+            strength_hold_s: How long to hold a strength level before changing
+            chaos_seed: Optional RNG seed for reproducibility
+            output_dir: Directory for logging output (None to disable logging)
+            run_label: Label prefix for output files
         """
         self.model_dir = model_dir
         self.mode = mode.lower()
         self.enable_display = enable_display and HAS_PYGAME
         self.attack_start_delay = attack_start_delay
         self.use_smoothing = use_smoothing
+        
+        # Chaotic mode settings
+        self.chaotic_mode = chaotic_mode
+        self.min_clean_s = min_clean_s
+        self.max_clean_s = max_clean_s
+        self.min_attack_s = min_attack_s
+        self.max_attack_s = max_attack_s
+        self.strength_min = strength_min
+        self.strength_max = strength_max
+        self.strength_hold_s = strength_hold_s
+        self.chaos_seed = chaos_seed
+        
+        # Logging settings
+        self.output_dir = output_dir
+        self.run_label = run_label
+        self.log_data = []  # Stores per-detection records for CSV
         
         # Load appropriate models based on mode
         self._load_models()
@@ -108,6 +162,19 @@ class LiveSpoofingDetector:
             strategy=SpoofingStrategy.INNOVATION_AWARE_GRADUAL_DRIFT
         )
         self.current_innovation = 0.0
+        
+        # Enable chaotic mode if requested
+        if self.chaotic_mode:
+            self.spoofer.enable_chaotic_mode(
+                min_clean_s=min_clean_s,
+                max_clean_s=max_clean_s,
+                min_attack_s=min_attack_s,
+                max_attack_s=max_attack_s,
+                strength_min=strength_min,
+                strength_max=strength_max,
+                strength_hold_s=strength_hold_s,
+                seed=chaos_seed
+            )
         
         # Dual Kalman filters
         self.kf_true = AdvancedKalmanFilter()
@@ -137,7 +204,8 @@ class LiveSpoofingDetector:
             pygame.init()
             self.screen = pygame.display.set_mode((800, 600))
             mode_str = "Unsupervised" if self.mode == "unsupervised" else "Supervised"
-            pygame.display.set_caption(f"GPS Spoofing Detection - {mode_str} Mode")
+            chaotic_str = " [CHAOTIC]" if self.chaotic_mode else ""
+            pygame.display.set_caption(f"GPS Spoofing Detection - {mode_str} Mode{chaotic_str}")
             self.font = pygame.font.Font(None, 48)
             self.small_font = pygame.font.Font(None, 24)
             self.clock = pygame.time.Clock()
@@ -273,13 +341,27 @@ class LiveSpoofingDetector:
         true_pos = np.array([tf.location.x, tf.location.y, tf.location.z])
         
         # Determine if attack should be active
-        self.attack_active = t >= self.attack_start_delay
-        
-        # Apply spoofing if attack is active
-        if self.attack_active:
-            spoofed_pos = self.spoofer.spoof_position(true_pos, self.current_innovation)
+        if self.chaotic_mode:
+            # In chaotic mode, the spoofer manages attack scheduling internally
+            # But we still respect the initial attack_start_delay as a baseline period
+            if t < self.attack_start_delay:
+                spoofed_pos = true_pos.copy()
+                self.attack_active = False
+            else:
+                # Let the spoofer handle chaotic scheduling
+                spoofed_pos = self.spoofer.spoof_position(
+                    true_pos, 
+                    self.current_innovation, 
+                    elapsed_time=t - self.attack_start_delay
+                )
+                self.attack_active = self.spoofer.is_chaotic_attack_active()
         else:
-            spoofed_pos = true_pos.copy()
+            # Non-chaotic mode: simple delay-based attack
+            self.attack_active = t >= self.attack_start_delay
+            if self.attack_active:
+                spoofed_pos = self.spoofer.spoof_position(true_pos, self.current_innovation)
+            else:
+                spoofed_pos = true_pos.copy()
             
         # Initialize Kalman filters on first GPS reading
         if not self.kf_initialized:
@@ -449,6 +531,32 @@ class LiveSpoofingDetector:
             'position_error': current_data['position_error'],
             'innovation_spoof': current_data['innovation_spoof']
         })
+        
+        # Get chaotic state info if in chaotic mode
+        chaotic_state = self.spoofer.get_chaotic_state() if self.chaotic_mode else {}
+        
+        # Log data for CSV output
+        log_record = {
+            'timestamp': current_data['timestamp'],
+            'is_attack_active': 1 if is_actually_attacking else 0,
+            'detected': 1 if is_attack_detected else 0,
+            'position_error': current_data['position_error'],
+            'innovation_spoof': current_data['innovation_spoof'],
+            'kf_tracking_error': current_data['kf_tracking_error'],
+        }
+        
+        # Add per-model scores and votes
+        for name, score in scores.items():
+            log_record[f'score_{name}'] = score
+        for name, vote in individual_preds.items():
+            vote_val = vote if isinstance(vote, bool) else (vote == -1)
+            log_record[f'vote_{name}'] = 1 if vote_val else 0
+            
+        # Add chaotic mode info if enabled
+        if self.chaotic_mode:
+            log_record['chaotic_strength'] = chaotic_state.get('strength', 1.0)
+            
+        self.log_data.append(log_record)
         
         # Print detection results
         self._print_detection_result(
@@ -688,19 +796,30 @@ class LiveSpoofingDetector:
             duration: Demo duration in seconds
         """
         mode_str = "UNSUPERVISED" if self.mode == "unsupervised" else "SUPERVISED"
+        chaotic_str = " [CHAOTIC]" if self.chaotic_mode else ""
         
         print("\n" + "="*70)
-        print(f"LIVE GPS SPOOFING DETECTION DEMO - {mode_str} MODE")
+        print(f"LIVE GPS SPOOFING DETECTION DEMO - {mode_str} MODE{chaotic_str}")
         print("="*70)
         print(f"Duration: {duration}s")
         print(f"Attack delay: {self.attack_start_delay}s")
         print(f"Attack type: INNOVATION_AWARE_GRADUAL_DRIFT")
+        if self.chaotic_mode:
+            print(f"Chaotic mode: ENABLED")
+            print(f"  Clean windows: {self.min_clean_s}-{self.max_clean_s}s")
+            print(f"  Attack windows: {self.min_attack_s}-{self.max_attack_s}s")
+            print(f"  Strength range: {self.strength_min}-{self.strength_max}x")
+            print(f"  Strength hold: {self.strength_hold_s}s")
+            if self.chaos_seed is not None:
+                print(f"  RNG seed: {self.chaos_seed}")
         if self.mode == "unsupervised":
             print(f"Temporal smoothing: {'Enabled' if self.use_smoothing else 'Disabled'}")
             summary = self.ensemble.get_summary()
             print(f"Models: {summary['model_names']}")
         else:
             print(f"Models: {len(self.ensemble.models)}")
+        if self.output_dir:
+            print(f"Logging to: {self.output_dir}")
         print("="*70 + "\n")
         
         # Setup sensors
@@ -774,6 +893,110 @@ class LiveSpoofingDetector:
         
         print("="*70 + "\n")
         
+        # Write logs if output directory specified
+        if self.output_dir and len(self.log_data) > 0:
+            self._write_logs(duration)
+        
+    def _write_logs(self, duration: float):
+        """
+        Write detection logs to CSV and JSON summary.
+        
+        Args:
+            duration: Total run duration in seconds
+        """
+        # Create output directory if needed
+        os.makedirs(self.output_dir, exist_ok=True)
+        
+        # Generate timestamp for filenames
+        timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+        base_name = f"{self.run_label}_{timestamp_str}"
+        
+        csv_path = os.path.join(self.output_dir, f"{base_name}_live_log.csv")
+        json_path = os.path.join(self.output_dir, f"{base_name}_summary.json")
+        
+        # Write CSV
+        if len(self.log_data) > 0:
+            fieldnames = list(self.log_data[0].keys())
+            with open(csv_path, 'w', newline='') as f:
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerows(self.log_data)
+            print(f"[INFO] Wrote {len(self.log_data)} detection records to {csv_path}")
+        
+        # Calculate metrics for summary
+        true_positives = sum(1 for d in self.detection_history 
+                            if d['detected'] and d['actual_attack'])
+        false_positives = sum(1 for d in self.detection_history 
+                             if d['detected'] and not d['actual_attack'])
+        true_negatives = sum(1 for d in self.detection_history 
+                            if not d['detected'] and not d['actual_attack'])
+        false_negatives = sum(1 for d in self.detection_history 
+                             if not d['detected'] and d['actual_attack'])
+        
+        total = len(self.detection_history)
+        accuracy = (true_positives + true_negatives) / total * 100 if total > 0 else 0
+        recall = true_positives / (true_positives + false_negatives) * 100 if (true_positives + false_negatives) > 0 else 0
+        precision = true_positives / (true_positives + false_positives) * 100 if (true_positives + false_positives) > 0 else 0
+        fpr = false_positives / (true_negatives + false_positives) * 100 if (true_negatives + false_positives) > 0 else 0
+        f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
+        
+        # Get model thresholds
+        thresholds = {}
+        if self.mode == "unsupervised":
+            summary = self.ensemble.get_summary()
+            thresholds = summary.get('thresholds', {})
+        
+        # Build summary JSON
+        summary_data = {
+            'run_info': {
+                'timestamp': timestamp_str,
+                'label': self.run_label,
+                'duration_s': duration,
+                'mode': self.mode,
+                'attack_type': 'INNOVATION_AWARE_GRADUAL_DRIFT',
+                'attack_start_delay_s': self.attack_start_delay,
+                'temporal_smoothing': self.use_smoothing
+            },
+            'chaotic_mode': {
+                'enabled': self.chaotic_mode,
+                'min_clean_s': self.min_clean_s if self.chaotic_mode else None,
+                'max_clean_s': self.max_clean_s if self.chaotic_mode else None,
+                'min_attack_s': self.min_attack_s if self.chaotic_mode else None,
+                'max_attack_s': self.max_attack_s if self.chaotic_mode else None,
+                'strength_min': self.strength_min if self.chaotic_mode else None,
+                'strength_max': self.strength_max if self.chaotic_mode else None,
+                'strength_hold_s': self.strength_hold_s if self.chaotic_mode else None,
+                'seed': self.chaos_seed if self.chaotic_mode else None
+            },
+            'model_info': {
+                'model_dir': self.model_dir,
+                'thresholds': thresholds
+            },
+            'confusion_matrix': {
+                'true_positives': true_positives,
+                'false_positives': false_positives,
+                'true_negatives': true_negatives,
+                'false_negatives': false_negatives
+            },
+            'metrics': {
+                'accuracy': round(accuracy, 2),
+                'recall': round(recall, 2),
+                'precision': round(precision, 2),
+                'false_positive_rate': round(fpr, 2),
+                'f1_score': round(f1, 2),
+                'total_detections': self.detection_count,
+                'total_samples': total
+            },
+            'files': {
+                'csv_log': csv_path,
+                'summary': json_path
+            }
+        }
+        
+        with open(json_path, 'w') as f:
+            json.dump(summary_data, f, indent=2)
+        print(f"[INFO] Wrote summary to {json_path}")
+        
     def cleanup(self):
         """Cleanup sensors and display."""
         print("\n[INFO] Cleaning up...")
@@ -790,8 +1013,26 @@ class LiveSpoofingDetector:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Live GPS spoofing detection demo"
+        description="Live GPS spoofing detection demo with chaotic attack scheduling",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Basic run with unsupervised detection
+  python detect_spoofing_live.py --duration 120
+  
+  # Chaotic mode with random attack scheduling
+  python detect_spoofing_live.py --chaotic --duration 300
+  
+  # Chaotic mode with custom parameters and logging
+  python detect_spoofing_live.py --chaotic --min-attack 15 --max-attack 60 \\
+      --output-dir results/live_runs --run-label experiment1 --seed 42
+  
+  # Reproducible chaotic run
+  python detect_spoofing_live.py --chaotic --seed 12345 --duration 180
+        """
     )
+    
+    # Detection mode
     parser.add_argument(
         '--mode',
         type=str,
@@ -805,6 +1046,8 @@ def main():
         default=None,
         help='Directory containing trained models (default: auto-select based on mode)'
     )
+    
+    # Run parameters
     parser.add_argument(
         '--duration',
         type=float,
@@ -815,8 +1058,81 @@ def main():
         '--attack-delay',
         type=float,
         default=10.0,
-        help='Seconds before starting attack (default: 10)'
+        help='Seconds before starting attack/chaotic scheduling (default: 10)'
     )
+    
+    # Chaotic mode parameters
+    chaotic_group = parser.add_argument_group('Chaotic Mode Options')
+    chaotic_group.add_argument(
+        '--chaotic',
+        action='store_true',
+        help='Enable chaotic attack scheduling with random on/off windows'
+    )
+    chaotic_group.add_argument(
+        '--min-clean',
+        type=float,
+        default=5.0,
+        help='Minimum duration of clean (no attack) windows in seconds (default: 5)'
+    )
+    chaotic_group.add_argument(
+        '--max-clean',
+        type=float,
+        default=20.0,
+        help='Maximum duration of clean windows in seconds (default: 20)'
+    )
+    chaotic_group.add_argument(
+        '--min-attack',
+        type=float,
+        default=10.0,
+        help='Minimum duration of attack windows in seconds (default: 10)'
+    )
+    chaotic_group.add_argument(
+        '--max-attack',
+        type=float,
+        default=40.0,
+        help='Maximum duration of attack windows in seconds (default: 40)'
+    )
+    chaotic_group.add_argument(
+        '--strength-min',
+        type=float,
+        default=0.3,
+        help='Minimum strength multiplier during attacks (default: 0.3)'
+    )
+    chaotic_group.add_argument(
+        '--strength-max',
+        type=float,
+        default=1.5,
+        help='Maximum strength multiplier during attacks (default: 1.5)'
+    )
+    chaotic_group.add_argument(
+        '--strength-hold',
+        type=float,
+        default=5.0,
+        help='How long to hold a strength level before changing in seconds (default: 5)'
+    )
+    chaotic_group.add_argument(
+        '--seed',
+        type=int,
+        default=None,
+        help='RNG seed for reproducible chaotic scheduling (default: random)'
+    )
+    
+    # Logging parameters
+    logging_group = parser.add_argument_group('Logging Options')
+    logging_group.add_argument(
+        '--output-dir',
+        type=str,
+        default=None,
+        help='Directory for logging output (default: no logging)'
+    )
+    logging_group.add_argument(
+        '--run-label',
+        type=str,
+        default='run',
+        help='Label prefix for output files (default: run)'
+    )
+    
+    # Display options
     parser.add_argument(
         '--no-display',
         action='store_true',
@@ -827,6 +1143,8 @@ def main():
         action='store_true',
         help='Disable temporal smoothing for unsupervised mode'
     )
+    
+    # CARLA connection
     parser.add_argument(
         '--host',
         type=str,
@@ -855,7 +1173,20 @@ def main():
         mode=args.mode,
         enable_display=not args.no_display,
         attack_start_delay=args.attack_delay,
-        use_smoothing=not args.no_smoothing
+        use_smoothing=not args.no_smoothing,
+        # Chaotic mode
+        chaotic_mode=args.chaotic,
+        min_clean_s=args.min_clean,
+        max_clean_s=args.max_clean,
+        min_attack_s=args.min_attack,
+        max_attack_s=args.max_attack,
+        strength_min=args.strength_min,
+        strength_max=args.strength_max,
+        strength_hold_s=args.strength_hold,
+        chaos_seed=args.seed,
+        # Logging
+        output_dir=args.output_dir,
+        run_label=args.run_label
     )
     
     try:

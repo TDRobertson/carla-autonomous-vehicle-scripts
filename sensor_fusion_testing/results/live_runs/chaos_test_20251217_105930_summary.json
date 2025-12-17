@@ -1,0 +1,49 @@
+{
+  "run_info": {
+    "timestamp": "20251217_105930",
+    "label": "chaos_test",
+    "duration_s": 180.0,
+    "mode": "unsupervised",
+    "attack_type": "INNOVATION_AWARE_GRADUAL_DRIFT",
+    "attack_start_delay_s": 10.0,
+    "temporal_smoothing": true
+  },
+  "chaotic_mode": {
+    "enabled": true,
+    "min_clean_s": 5.0,
+    "max_clean_s": 20.0,
+    "min_attack_s": 10.0,
+    "max_attack_s": 40.0,
+    "strength_min": 0.3,
+    "strength_max": 1.5,
+    "strength_hold_s": 5.0,
+    "seed": 42
+  },
+  "model_info": {
+    "model_dir": "trained_models_unsupervised",
+    "thresholds": {
+      "iforest": -0.06340664256935036,
+      "pca": -0.12389191082895906,
+      "lof": 0.05222781035412116
+    }
+  },
+  "confusion_matrix": {
+    "true_positives": 94,
+    "false_positives": 8,
+    "true_negatives": 62,
+    "false_negatives": 5
+  },
+  "metrics": {
+    "accuracy": 92.31,
+    "recall": 94.95,
+    "precision": 92.16,
+    "false_positive_rate": 11.43,
+    "f1_score": 93.53,
+    "total_detections": 102,
+    "total_samples": 169
+  },
+  "files": {
+    "csv_log": "results/live_runs\\chaos_test_20251217_105930_live_log.csv",
+    "summary": "results/live_runs\\chaos_test_20251217_105930_summary.json"
+  }
+}

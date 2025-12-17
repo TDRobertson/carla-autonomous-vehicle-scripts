@@ -540,6 +540,112 @@ python train_models.py --train-dir data/training --val-dir data/test --skip-save
 | `--no-smoothing`      | Disable temporal smoothing (unsupervised only) |
 | `--no-display`        | Console output only (no pygame window)         |
 
+#### Chaotic Mode Testing
+
+Chaotic mode enables random on/off attack scheduling with strength modulation, creating more realistic and challenging test scenarios.
+
+**Basic Chaotic Mode:**
+
+```bash
+# Enable chaotic attack scheduling (random on/off windows)
+python detect_spoofing_live.py --chaotic --duration 300
+
+# Reproducible chaotic run with fixed seed
+python detect_spoofing_live.py --chaotic --seed 42 --duration 180
+```
+
+**Custom Chaotic Parameters:**
+
+```bash
+# Aggressive attacks: longer attack windows, higher strength
+python detect_spoofing_live.py --chaotic \
+  --min-attack 20 --max-attack 60 \
+  --strength-min 0.8 --strength-max 2.0 \
+  --duration 300
+
+# Subtle attacks: shorter bursts, lower strength
+python detect_spoofing_live.py --chaotic \
+  --min-attack 5 --max-attack 15 \
+  --strength-min 0.2 --strength-max 0.8 \
+  --duration 300
+
+# Fast strength changes
+python detect_spoofing_live.py --chaotic --strength-hold 2.0 --duration 180
+```
+
+**Chaotic Mode Parameters:**
+
+| Flag              | Default | Description                                    |
+| ----------------- | ------- | ---------------------------------------------- |
+| `--chaotic`       | False   | Enable chaotic attack scheduling               |
+| `--min-clean`     | 5.0     | Minimum clean (no attack) window duration (s)  |
+| `--max-clean`     | 20.0    | Maximum clean window duration (s)              |
+| `--min-attack`    | 10.0    | Minimum attack window duration (s)             |
+| `--max-attack`    | 40.0    | Maximum attack window duration (s)             |
+| `--strength-min`  | 0.3     | Minimum strength multiplier during attacks     |
+| `--strength-max`  | 1.5     | Maximum strength multiplier during attacks     |
+| `--strength-hold` | 5.0     | Seconds to hold strength before changing       |
+| `--seed`          | None    | RNG seed for reproducible scheduling           |
+
+**How Chaotic Mode Works:**
+
+1. **State Machine**: Alternates between CLEAN and ATTACK states with random durations
+2. **Strength Modulation**: During attacks, the drift rate/amplitude are multiplied by a random strength factor that changes periodically
+3. **Innovation-Aware**: The underlying innovation safety guardrails still apply - attacks automatically reduce intensity when approaching detection thresholds
+4. **Reproducibility**: Use `--seed` for identical attack schedules across runs
+
+#### Detection Logging
+
+Enable logging to save per-detection results for analysis:
+
+```bash
+# Log results to CSV + JSON summary
+python detect_spoofing_live.py --output-dir results/live_runs --run-label experiment1
+
+# Chaotic mode with full logging
+python detect_spoofing_live.py --chaotic --seed 42 \
+  --output-dir results/live_runs --run-label chaotic_test1 \
+  --duration 300
+```
+
+**Logging Parameters:**
+
+| Flag           | Default | Description                           |
+| -------------- | ------- | ------------------------------------- |
+| `--output-dir` | None    | Directory for log files (enables logging) |
+| `--run-label`  | "run"   | Label prefix for output filenames     |
+
+**Log Output Files:**
+
+```
+results/live_runs/
+|-- experiment1_20251217_143022_live_log.csv    # Per-detection records
+|-- experiment1_20251217_143022_summary.json    # Run summary and metrics
+```
+
+**CSV Log Schema:**
+
+| Column              | Description                              |
+| ------------------- | ---------------------------------------- |
+| `timestamp`         | Simulation time (seconds)                |
+| `is_attack_active`  | Ground truth: 1 if attack, 0 if clean    |
+| `detected`          | Model prediction: 1 if anomaly detected  |
+| `position_error`    | True vs spoofed GPS distance (meters)    |
+| `innovation_spoof`  | Kalman filter innovation value           |
+| `kf_tracking_error` | True GPS vs KF estimate distance         |
+| `score_{model}`     | Per-model anomaly score                  |
+| `vote_{model}`      | Per-model vote (1 = anomaly)             |
+| `chaotic_strength`  | Current strength multiplier (chaotic mode) |
+
+**JSON Summary Contents:**
+
+- `run_info`: Duration, mode, attack type, delay settings
+- `chaotic_mode`: Chaotic parameters (if enabled)
+- `model_info`: Model directory, calibrated thresholds
+- `confusion_matrix`: TP, FP, TN, FN counts
+- `metrics`: Accuracy, recall, precision, FPR, F1-score
+- `files`: Paths to CSV and summary files
+
 **Model Selection Guide:**
 
 | Use Case                | Recommended Model            | Why                                           |

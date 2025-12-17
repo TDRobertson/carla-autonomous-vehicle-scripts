@@ -2,13 +2,134 @@ import numpy as np
 import time
 import random
 from enum import Enum
+from typing import Optional, Dict, Tuple
 
 class SpoofingStrategy(Enum):
     GRADUAL_DRIFT = 1
     SUDDEN_JUMP = 2
     RANDOM_WALK = 3
     REPLAY = 4
-    INNOVATION_AWARE_GRADUAL_DRIFT = 5  # NEW: Innovation-aware gradual drift
+    INNOVATION_AWARE_GRADUAL_DRIFT = 5  # Innovation-aware gradual drift
+
+
+class ChaoticScheduler:
+    """
+    Manages chaotic on/off attack scheduling with strength modulation.
+    
+    State machine: CLEAN <-> ATTACK with random durations and varying strength.
+    """
+    
+    def __init__(
+        self,
+        min_clean_s: float = 5.0,
+        max_clean_s: float = 20.0,
+        min_attack_s: float = 10.0,
+        max_attack_s: float = 40.0,
+        strength_min: float = 0.3,
+        strength_max: float = 1.5,
+        strength_hold_s: float = 5.0,
+        seed: Optional[int] = None
+    ):
+        """
+        Initialize the chaotic scheduler.
+        
+        Args:
+            min_clean_s: Minimum duration of clean (no attack) windows
+            max_clean_s: Maximum duration of clean windows
+            min_attack_s: Minimum duration of attack windows
+            max_attack_s: Maximum duration of attack windows
+            strength_min: Minimum strength multiplier during attacks
+            strength_max: Maximum strength multiplier during attacks
+            strength_hold_s: How long to hold a strength level before changing
+            seed: Optional RNG seed for reproducibility
+        """
+        self.min_clean_s = min_clean_s
+        self.max_clean_s = max_clean_s
+        self.min_attack_s = min_attack_s
+        self.max_attack_s = max_attack_s
+        self.strength_min = strength_min
+        self.strength_max = strength_max
+        self.strength_hold_s = strength_hold_s
+        
+        # RNG for reproducibility
+        self.rng = random.Random(seed)
+        
+        # State machine
+        self.is_attacking = False
+        self.current_strength = 1.0
+        self.state_start_time = 0.0
+        self.state_duration = 0.0
+        self.strength_change_time = 0.0
+        
+        # Initialize first state (start clean)
+        self._transition_to_clean(0.0)
+        
+    def _transition_to_clean(self, current_time: float):
+        """Transition to clean state."""
+        self.is_attacking = False
+        self.current_strength = 0.0
+        self.state_start_time = current_time
+        self.state_duration = self.rng.uniform(self.min_clean_s, self.max_clean_s)
+        
+    def _transition_to_attack(self, current_time: float):
+        """Transition to attack state."""
+        self.is_attacking = True
+        self.state_start_time = current_time
+        self.state_duration = self.rng.uniform(self.min_attack_s, self.max_attack_s)
+        self._sample_new_strength(current_time)
+        
+    def _sample_new_strength(self, current_time: float):
+        """Sample a new strength multiplier."""
+        self.current_strength = self.rng.uniform(self.strength_min, self.strength_max)
+        self.strength_change_time = current_time
+        
+    def update(self, current_time: float) -> Tuple[bool, float]:
+        """
+        Update the scheduler state based on current time.
+        
+        Args:
+            current_time: Current simulation time in seconds
+            
+        Returns:
+            Tuple of (is_attacking, strength_multiplier)
+        """
+        time_in_state = current_time - self.state_start_time
+        
+        # Check for state transition
+        if time_in_state >= self.state_duration:
+            if self.is_attacking:
+                self._transition_to_clean(current_time)
+            else:
+                self._transition_to_attack(current_time)
+                
+        # If attacking, check for strength change
+        if self.is_attacking:
+            time_since_strength_change = current_time - self.strength_change_time
+            if time_since_strength_change >= self.strength_hold_s:
+                self._sample_new_strength(current_time)
+                
+        return self.is_attacking, self.current_strength
+    
+    def get_state_info(self) -> Dict:
+        """Get current state information for logging."""
+        return {
+            'is_attacking': self.is_attacking,
+            'current_strength': self.current_strength,
+            'time_in_state': 0.0,  # Will be updated by caller
+            'state_duration': self.state_duration
+        }
+    
+    def reset(self, seed: Optional[int] = None):
+        """Reset the scheduler state."""
+        if seed is not None:
+            self.rng = random.Random(seed)
+        self.is_attacking = False
+        self.current_strength = 1.0
+        self.state_start_time = 0.0
+        self.state_duration = 0.0
+        self.strength_change_time = 0.0
+        self._transition_to_clean(0.0)
+
 
 class GPSSpoofer:
     def __init__(self, initial_position, strategy=SpoofingStrategy.GRADUAL_DRIFT, aggressive_mode=False):
@@ -50,9 +171,85 @@ class GPSSpoofer:
         self.max_drift_rate = 0.25  # m/s - maximum drift rate
         self.innovation_safety_margin = 0.7  # Reduce drift when innovation > 70% of threshold
         
-    def spoof_position(self, true_position, innovation=None):
+        # Chaotic mode parameters
+        self.chaotic_mode = False
+        self.chaotic_scheduler = None
+        self.chaotic_attack_active = False
+        self.chaotic_strength = 1.0
+        
+    def enable_chaotic_mode(
+        self,
+        min_clean_s: float = 5.0,
+        max_clean_s: float = 20.0,
+        min_attack_s: float = 10.0,
+        max_attack_s: float = 40.0,
+        strength_min: float = 0.3,
+        strength_max: float = 1.5,
+        strength_hold_s: float = 5.0,
+        seed: Optional[int] = None
+    ):
         """
-        Generate a spoofed position based on the selected strategy
+        Enable chaotic attack scheduling with random on/off windows and strength modulation.
+        
+        Args:
+            min_clean_s: Minimum duration of clean (no attack) windows
+            max_clean_s: Maximum duration of clean windows
+            min_attack_s: Minimum duration of attack windows
+            max_attack_s: Maximum duration of attack windows
+            strength_min: Minimum strength multiplier during attacks
+            strength_max: Maximum strength multiplier during attacks
+            strength_hold_s: How long to hold a strength level before changing
+            seed: Optional RNG seed for reproducibility
+        """
+        self.chaotic_mode = True
+        self.chaotic_scheduler = ChaoticScheduler(
+            min_clean_s=min_clean_s,
+            max_clean_s=max_clean_s,
+            min_attack_s=min_attack_s,
+            max_attack_s=max_attack_s,
+            strength_min=strength_min,
+            strength_max=strength_max,
+            strength_hold_s=strength_hold_s,
+            seed=seed
+        )
+        
+    def disable_chaotic_mode(self):
+        """Disable chaotic attack scheduling."""
+        self.chaotic_mode = False
+        self.chaotic_scheduler = None
+        self.chaotic_attack_active = False
+        self.chaotic_strength = 1.0
+        
+    def is_chaotic_attack_active(self) -> bool:
+        """Check if the chaotic scheduler currently has an attack active."""
+        return self.chaotic_mode and self.chaotic_attack_active
+    
+    def get_chaotic_state(self) -> Dict:
+        """Get current chaotic scheduler state for logging."""
+        if not self.chaotic_mode or self.chaotic_scheduler is None:
+            return {
+                'chaotic_mode': False,
+                'is_attacking': False,
+                'strength': 1.0
+            }
+        return {
+            'chaotic_mode': True,
+            'is_attacking': self.chaotic_attack_active,
+            'strength': self.chaotic_strength,
+            **self.chaotic_scheduler.get_state_info()
+        }
+        
+    def spoof_position(self, true_position, innovation=None, elapsed_time: Optional[float] = None):
+        """
+        Generate a spoofed position based on the selected strategy.
+        
+        Args:
+            true_position: True GPS position
+            innovation: Current Kalman filter innovation value
+            elapsed_time: Optional elapsed time for chaotic scheduling (uses wall clock if None)
+            
+        Returns:
+            Spoofed position (or true position if chaotic mode says no attack)
         """
         # Convert true_position to float64
         true_position = np.array(true_position, dtype=np.float64)
@@ -60,6 +257,20 @@ class GPSSpoofer:
         # Update innovation if provided
         if innovation is not None:
             self.update_innovation(innovation)
+        
+        # Handle chaotic mode scheduling
+        if self.chaotic_mode and self.chaotic_scheduler is not None:
+            # Use provided elapsed_time or calculate from wall clock
+            if elapsed_time is None:
+                elapsed_time = time.time() - self.time_start
+            
+            # Update chaotic scheduler
+            self.chaotic_attack_active, self.chaotic_strength = self.chaotic_scheduler.update(elapsed_time)
+            
+            # If chaotic mode says no attack, return true position
+            if not self.chaotic_attack_active:
+                self.current_position = true_position.copy()
+                return true_position
         
         if self.strategy == SpoofingStrategy.GRADUAL_DRIFT:
             return self._gradual_drift(true_position)
@@ -91,47 +302,61 @@ class GPSSpoofer:
     
     def _innovation_aware_gradual_drift(self, true_position):
         """
-        Innovation-aware gradual drift that adapts to avoid detection
+        Innovation-aware gradual drift that adapts to avoid detection.
+        
+        In chaotic mode, the strength multiplier modulates the base drift rate
+        and amplitude, creating more varied attack patterns.
         """
         elapsed_time = time.time() - self.time_start
         
+        # Get strength multiplier from chaotic mode (default 1.0 if not chaotic)
+        strength = self.chaotic_strength if self.chaotic_mode else 1.0
+        
+        # Apply strength to base parameters
+        effective_drift_rate = self.adaptive_drift_rate * strength
+        effective_amplitude = self.drift_amplitude * strength
+        effective_max_rate = self.max_drift_rate * strength
+        
         # Calculate base drift with exponential growth for more persistent effect
-        base_drift = self.adaptive_drift_rate * elapsed_time * (1 + 0.1 * elapsed_time)
+        base_drift = effective_drift_rate * elapsed_time * (1 + 0.1 * elapsed_time)
         
         # Add oscillations to make the drift more realistic
-        oscillation = self.drift_amplitude * np.sin(2 * np.pi * self.drift_frequency * elapsed_time)
+        oscillation = effective_amplitude * np.sin(2 * np.pi * self.drift_frequency * elapsed_time)
         
-        # Enhanced adaptive logic based on innovation
+        # Enhanced adaptive logic based on innovation (safety guardrail - always applies)
         if self.current_innovation > self.innovation_threshold * self.innovation_safety_margin:
             # If approaching threshold, reduce drift rate but maintain minimum
-            adaptive_rate = max(self.min_drift_rate, self.adaptive_drift_rate * 0.3)
+            adaptive_rate = max(self.min_drift_rate, effective_drift_rate * 0.3)
         elif self.suspicious_counter > 2:
             # If multiple suspicious readings detected, pause drift temporarily
             adaptive_rate = 0.0
         elif self.suspicious_counter > 0:
             # If some suspicious readings, reduce drift rate
-            adaptive_rate = max(self.min_drift_rate, self.adaptive_drift_rate * 0.6)
+            adaptive_rate = max(self.min_drift_rate, effective_drift_rate * 0.6)
         else:
             # Normal drift rate with some variation
-            adaptive_rate = self.adaptive_drift_rate * (0.8 + 0.4 * random.random())
-            adaptive_rate = min(self.max_drift_rate, adaptive_rate)
+            adaptive_rate = effective_drift_rate * (0.8 + 0.4 * random.random())
+            adaptive_rate = min(effective_max_rate, adaptive_rate)
         
         # Calculate drift vector with enhanced direction changes
-        drift_vector = self.drift_direction * (base_drift * adaptive_rate / self.adaptive_drift_rate + oscillation)
+        if effective_drift_rate > 0:
+            drift_vector = self.drift_direction * (base_drift * adaptive_rate / effective_drift_rate + oscillation)
+        else:
+            drift_vector = self.drift_direction * oscillation
         
         # Add directional changes over time to make attack more sophisticated
         if elapsed_time > 10.0:  # After 10 seconds, start changing direction
             direction_change = np.array([
-                np.sin(elapsed_time * 0.1) * 0.3,
-                np.cos(elapsed_time * 0.1) * 0.3,
+                np.sin(elapsed_time * 0.1) * 0.3 * strength,
+                np.cos(elapsed_time * 0.1) * 0.3 * strength,
                 0.0
             ], dtype=np.float64)
             drift_vector += direction_change
         
-        # Add small random perturbations
+        # Add small random perturbations (scaled by strength)
         random_perturbation = np.array([
-            random.uniform(-0.02, 0.02),
-            random.uniform(-0.02, 0.02),
+            random.uniform(-0.02, 0.02) * strength,
+            random.uniform(-0.02, 0.02) * strength,
             0.0
         ], dtype=np.float64)
         
@@ -237,6 +462,10 @@ class GPSSpoofer:
         self.replay_index = 0
         self.innovation_history = []
         self.suspicious_counter = 0
+        
+        # Reset chaotic scheduler if enabled
+        if self.chaotic_mode and self.chaotic_scheduler is not None:
+            self.chaotic_scheduler.reset()
     
     def get_innovation_stats(self):
         """
