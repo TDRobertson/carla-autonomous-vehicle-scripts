@@ -662,6 +662,100 @@ results/live_runs/
 - `ml_models/README.md` - Package documentation and API reference
 - `AUTOMATION_GUIDE.md` - Data collection automation strategies
 
+### GPS+IMU+KF-only Model (No Ground Truth)
+
+A new detection pipeline that uses **only victim-side sensor data** without any ground-truth reference. This is independent of any "golden" dataset.
+
+**Features used:**
+
+| Category | Features | Description |
+| -------- | -------- | ----------- |
+| GPS | `gps_x`, `gps_y`, `gps_z` | GNSS sensor output converted to local ENU meters |
+| KF State | `kf_x/y/z`, `kf_vx/vy/vz` | Kalman filter position and velocity estimates |
+| Innovation | `innov_x/y/z`, `innov_norm` | Measurement residual (GPS - KF prediction) |
+| NIS | `nis` | Normalized Innovation Squared (chi-squared) |
+| Covariance | `S_x/y/z` | Innovation covariance diagonal |
+| IMU | `accel_magnitude`, `gyro_magnitude` | Accelerometer/gyroscope magnitudes |
+| Rolling | `innov_norm_ma/std`, `nis_ma/std` | Temporal statistics |
+
+**Data Collection:**
+
+```bash
+# Collect clean training data (no attacks - default)
+python ml_data_collector_gps_imu_kf.py --duration 120 --output-dir data/training_gps_imu_kf
+
+# Collect validation data with attacks after 30s
+python ml_data_collector_gps_imu_kf.py --duration 120 --attack-delay 30 \
+    --output-dir data/validation_gps_imu_kf
+
+# Collect with random start/stop attacks
+python ml_data_collector_gps_imu_kf.py --duration 180 --random-attacks \
+    --output-dir data/validation_gps_imu_kf
+
+# Multiple training runs with labels
+python ml_data_collector_gps_imu_kf.py --duration 120 --label train_run01 \
+    --output-dir data/training_gps_imu_kf
+python ml_data_collector_gps_imu_kf.py --duration 120 --label train_run02 \
+    --output-dir data/training_gps_imu_kf
+```
+
+**Training:**
+
+```bash
+# Train the GPS+IMU+KF-only ensemble on clean data
+python train_unsupervised_ensemble_gps_imu_kf.py --train-dir data/training_gps_imu_kf
+
+# With validation data for evaluation
+python train_unsupervised_ensemble_gps_imu_kf.py \
+    --train-dir data/training_gps_imu_kf \
+    --val-dir data/validation_gps_imu_kf
+
+# Output saved to trained_models_unsupervised_gps_imu_kf/
+```
+
+**Live Detection:**
+
+```bash
+# Basic run
+python detect_spoofing_live_gps_imu_kf.py --duration 120
+
+# Chaotic mode with random attack scheduling
+python detect_spoofing_live_gps_imu_kf.py --chaotic --duration 300
+
+# With logging
+python detect_spoofing_live_gps_imu_kf.py --chaotic \
+  --output-dir results/gps_imu_kf --run-label test1 --duration 180
+```
+
+**Key Difference from Standard Model:**
+
+The standard model uses `vehicle.get_transform()` (simulator ground truth) for features like `position_error` and `kf_tracking_error`. The GPS+IMU+KF-only model:
+
+- Uses GNSS sensor lat/lon/alt converted to local ENU meters
+- Does NOT use any ground-truth position for feature extraction
+- Ground truth is only used for simulating attacks and logging `is_attack_active`
+- Innovation/NIS statistics provide the attack detection signal
+
+**Output Files:**
+
+```
+trained_models_unsupervised_gps_imu_kf/
+|-- iforest.pkl           # Isolation Forest
+|-- pca.pkl               # PCA reconstruction error
+|-- lof.pkl               # Local Outlier Factor
+|-- unsup_ensemble.pkl    # Ensemble configuration
+|-- scaler.pkl            # Feature normalization
+|-- config.json           # Training config and feature list
+```
+
+**Log Files (with --output-dir):**
+
+```
+results/gps_imu_kf/
+|-- run_YYYYMMDD_HHMMSS_gps_imu_kf_log.csv      # Per-detection records
+|-- run_YYYYMMDD_HHMMSS_gps_imu_kf_summary.json # Run summary and metrics
+```
+
 ### Complete Pipeline Testing
 
 ```bash

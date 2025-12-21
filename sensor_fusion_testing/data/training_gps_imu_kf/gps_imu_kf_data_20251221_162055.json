@@ -1,0 +1,67 @@
+{
+  "metadata": {
+    "collection_timestamp": "20251221_162055",
+    "label": "unlabeled",
+    "duration_seconds": 120.0,
+    "warmup_seconds": 5.0,
+    "attack_start_delay_seconds": 99999.0,
+    "attack_mode": "NONE",
+    "feature_type": "GPS+IMU+KF-only (no ground truth)",
+    "gnss_rate_hz": 10,
+    "imu_rate_hz": 50,
+    "total_samples": 1200
+  },
+  "statistics": {
+    "total_samples": 1200,
+    "clean_samples": 1200,
+    "attack_samples": 0,
+    "duration_seconds": 119.90587310120463,
+    "sampling_rate_hz": 10.007850065752486,
+    "innov_norm": {
+      "min": 0.0,
+      "max": 19.247607872351743,
+      "mean": 5.490554120400835,
+      "std": 2.538019289053187
+    },
+    "nis": {
+      "min": 0.0,
+      "max": 722.4770761319303,
+      "mean": 107.55141618844542,
+      "std": 104.79486010519896
+    },
+    "clean_period": {
+      "innov_norm_mean": 5.490554120400835,
+      "nis_mean": 107.55141618844542
+    }
+  },
+  "feature_columns": [
+    "timestamp",
+    "gps_x",
+    "gps_y",
+    "gps_z",
+    "kf_x",
+    "kf_y",
+    "kf_z",
+    "kf_vx",
+    "kf_vy",
+    "kf_vz",
+    "innov_x",
+    "innov_y",
+    "innov_z",
+    "innov_norm",
+    "nis",
+    "S_x",
+    "S_y",
+    "S_z",
+    "accel_magnitude",
+    "gyro_magnitude",
+    "P_x",
+    "P_y",
+    "P_z",
+    "is_attack_active",
+    "innov_norm_ma",
+    "innov_norm_std",
+    "nis_ma",
+    "nis_std"
+  ]
+}

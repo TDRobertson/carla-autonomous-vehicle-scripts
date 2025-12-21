@@ -1,0 +1,49 @@
+{
+  "run_info": {
+    "timestamp": "20251221_171249",
+    "label": "exp1",
+    "duration_s": 2400.0,
+    "mode": "gps_imu_kf_only",
+    "attack_type": "INNOVATION_AWARE_GRADUAL_DRIFT",
+    "attack_start_delay_s": 10.0,
+    "temporal_smoothing": true
+  },
+  "chaotic_mode": {
+    "enabled": true,
+    "min_clean_s": 5.0,
+    "max_clean_s": 20.0,
+    "min_attack_s": 10.0,
+    "max_attack_s": 40.0,
+    "strength_min": 0.3,
+    "strength_max": 1.5,
+    "seed": null
+  },
+  "model_info": {
+    "model_dir": "trained_models_unsupervised_gps_imu_kf",
+    "feature_count": 23,
+    "thresholds": {
+      "iforest": -0.04711721923917158,
+      "pca": -0.2241896696338356,
+      "lof": 0.04455923541766134
+    }
+  },
+  "confusion_matrix": {
+    "true_positives": 1278,
+    "false_positives": 166,
+    "true_negatives": 601,
+    "false_negatives": 219
+  },
+  "metrics": {
+    "accuracy": 82.99,
+    "recall": 85.37,
+    "precision": 88.5,
+    "false_positive_rate": 21.64,
+    "f1_score": 86.91,
+    "total_detections": 1444,
+    "total_samples": 2264
+  },
+  "files": {
+    "csv_log": "results/gps_imu_kf\\exp1_20251221_171249_gps_imu_kf_log.csv",
+    "summary": "results/gps_imu_kf\\exp1_20251221_171249_gps_imu_kf_summary.json"
+  }
+}
